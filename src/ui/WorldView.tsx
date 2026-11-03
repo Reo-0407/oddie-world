@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { matte } from '../world/materials.ts';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { speciesById } from '../data/index.ts';
@@ -186,6 +187,7 @@ export function WorldView({ name, characterIndex, team, ropes, coins, paused, on
       if (!pending) {
         pending = loader.loadAsync(modelUrl(speciesId)).then((gltf) => {
           const wrapper = new THREE.Group();
+          matte(gltf.scene);
           wrapper.add(gltf.scene);
           const box = new THREE.Box3().setFromObject(wrapper);
           const size = box.getSize(new THREE.Vector3());

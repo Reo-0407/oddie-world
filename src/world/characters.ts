@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { matte } from './materials.ts';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 export interface CharacterLook {
@@ -30,6 +31,7 @@ export async function loadCharacterModel(look: CharacterLook, height = PLAYER_HE
   try {
     const gltf = await new GLTFLoader().loadAsync(characterUrl(look));
     const wrapper = new THREE.Group();
+    matte(gltf.scene);
     wrapper.add(gltf.scene);
     const size = new THREE.Box3().setFromObject(wrapper).getSize(new THREE.Vector3());
     if (size.y > 0) gltf.scene.scale.setScalar(height / size.y);
