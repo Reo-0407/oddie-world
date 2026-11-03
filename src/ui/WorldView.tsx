@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { speciesById } from '../data/index.ts';
+import { highestLevel, type OwnedOddie } from '../game/owned.ts';
+import type { Ropes } from '../world/save.ts';
 import { buildCharacter, CHARACTERS, disposeObject, loadCharacterModel } from '../world/characters.ts';
 import {
   clampToArea, distance, DUEL_RANGE, inputToWorld, joystickToMove, keysToMove, NOTICE_RANGE, type Vec2,
@@ -23,7 +25,9 @@ const JOY_RADIUS = 50;
 interface Props {
   name: string;
   characterIndex: number;
-  playerLevel: number;
+  team: OwnedOddie[];
+  ropes: Ropes;
+  coins: number;
   paused: boolean;
   onDuel: (speciesId: number, level: number) => void;
 }
@@ -54,7 +58,8 @@ function pickRandom<T>(items: readonly T[]): T {
   return items[Math.floor(Math.random() * items.length)];
 }
 
-export function WorldView({ name, characterIndex, playerLevel, paused, onDuel }: Props) {
+export function WorldView({ name, characterIndex, team, ropes, coins, paused, onDuel }: Props) {
+  const playerLevel = highestLevel(team);
   const containerRef = useRef<HTMLDivElement>(null);
   const joyRef = useRef<HTMLDivElement>(null);
   const knobRef = useRef<HTMLDivElement>(null);
@@ -435,7 +440,10 @@ export function WorldView({ name, characterIndex, playerLevel, paused, onDuel }:
 
   return (
     <div className="world" ref={containerRef}>
-      <div className="world-hud">{name} · 이동: WASD/방향키 또는 왼쪽 조이스틱</div>
+      <div className="world-hud">
+        <div>{name} · 코인 {coins} · 로프 {ropes.basic} · 튼튼한 로프 {ropes.sturdy}</div>
+        <div>{team.map((oddie) => `${speciesById(oddie.speciesId).name} Lv.${oddie.level}`).join(' / ')}</div>
+      </div>
       <div
         className="joystick"
         ref={joyRef}

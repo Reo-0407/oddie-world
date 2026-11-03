@@ -1,10 +1,26 @@
-export const SAVE_KEY = 'oddie-world-save-v1';
+import { MAX_TEAM, type OwnedOddie } from '../game/owned.ts';
+
+export const SAVE_KEY = 'oddie-world-save-v1'; // 키는 그대로 두고 version 필드로 구분한다
+export const SAVE_VERSION = 2;
 export const CHARACTER_COUNT = 6; // 옛 저장(0~3)도 그대로 유효
+export const START_LEVEL = 10;
+export const START_ROPES = { basic: 5, sturdy: 1 };
+
+export interface Ropes {
+  basic: number;
+  sturdy: number;
+}
 
 export interface SaveData {
+  version: typeof SAVE_VERSION;
   name: string;
   characterIndex: number;
-  starterId: number | null;
+  team: OwnedOddie[];
+  box: OwnedOddie[];
+  ropes: Ropes;
+  coins: number;
+  /** 팀 최고 레벨 (팀이 비면 시작 레벨) */
+  playerLevel: number;
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -17,17 +33,56 @@ function defaultStorage(): StorageLike | null {
   }
 }
 
-/** 저장된 값이 올바른 모양인지 검사해서 안전하게 돌려준다 */
+export function newSave(name: string, characterIndex: number): SaveData {
+  return {
+    version: SAVE_VERSION, name, characterIndex, team: [], box: [],
+    ropes: { ...START_ROPES }, coins: 0, playerLevel: START_LEVEL,
+  };
+}
+
+const isCount = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0;
+
+function parseOddie(value: unknown): OwnedOddie | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { speciesId, level, exp } = value as Record<string, unknown>;
+  if (!isCount(speciesId) || speciesId < 1 || speciesId > 999) return null;
+  if (!isCount(level) || level < 1 || level > 100) return null;
+  return { speciesId, level, exp: isCount(exp) ? exp : 0 };
+}
+
+function parseOddies(value: unknown, max: number): OwnedOddie[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(parseOddie).filter((oddie): oddie is OwnedOddie => oddie !== null).slice(0, max);
+}
+
+/** 저장된 값이 올바른 모양인지 검사해서 안전하게 돌려준다. 옛 v1(starterId만 있음)은 v2로 옮긴다 */
 export function parseSave(raw: string | null): SaveData | null {
   if (!raw) return null;
   try {
-    const data = JSON.parse(raw) as Partial<SaveData>;
+    const data = JSON.parse(raw) as Record<string, unknown>;
     if (typeof data.name !== 'string' || data.name.trim() === '') return null;
     const index = data.characterIndex;
     if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= CHARACTER_COUNT) return null;
-    const starter = data.starterId;
-    const starterId = typeof starter === 'number' && Number.isInteger(starter) && starter > 0 ? starter : null;
-    return { name: data.name.trim().slice(0, 12), characterIndex: index, starterId };
+    const base = newSave(data.name.trim().slice(0, 12), index);
+
+    if (data.version === undefined || data.version === 1) {
+      const starter = data.starterId;
+      if (isCount(starter) && starter > 0) base.team = [{ speciesId: starter, level: START_LEVEL, exp: 0 }];
+      return base;
+    }
+    if (data.version !== SAVE_VERSION) return null;
+
+    const ropes = (data.ropes ?? {}) as Record<string, unknown>;
+    base.team = parseOddies(data.team, MAX_TEAM);
+    base.box = parseOddies(data.box, 1000);
+    base.ropes = {
+      basic: isCount(ropes.basic) ? ropes.basic : START_ROPES.basic,
+      sturdy: isCount(ropes.sturdy) ? ropes.sturdy : 0,
+    };
+    base.coins = isCount(data.coins) ? data.coins : 0;
+    base.playerLevel = isCount(data.playerLevel) && data.playerLevel >= 1 ? data.playerLevel : START_LEVEL;
+    return base;
   } catch {
     return null;
   }

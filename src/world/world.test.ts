@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { clampToArea, distance, inputToWorld, isWithin, joystickToMove, keysToMove } from './math.ts';
-import { clearSave, loadSave, parseSave, SAVE_KEY, writeSave } from './save.ts';
+import { clearSave, loadSave, newSave, parseSave, SAVE_KEY, writeSave } from './save.ts';
 import { wildLevel } from './spawns.ts';
 import { stepChase, stepWander, type WanderState } from './wander.ts';
 
@@ -83,7 +83,14 @@ describe('배회 AI', () => {
 });
 
 describe('저장', () => {
-  const data = { name: '준우', characterIndex: 2, starterId: 42 };
+  const data = {
+    ...newSave('준우', 2),
+    team: [{ speciesId: 42, level: 12, exp: 30 }],
+    box: [{ speciesId: 3, level: 8, exp: 0 }],
+    ropes: { basic: 3, sturdy: 2 },
+    coins: 120,
+    playerLevel: 12,
+  };
   it('쓰고 읽는다', () => {
     const s = fakeStorage();
     expect(writeSave(data, s)).toBe(true);
@@ -91,14 +98,35 @@ describe('저장', () => {
     clearSave(s);
     expect(loadSave(s)).toBeNull();
   });
+  it('옛 v1 저장(starterId)은 v2로 옮긴다', () => {
+    const old = JSON.stringify({ name: '준우', characterIndex: 3, starterId: 42 });
+    expect(parseSave(old)).toEqual({
+      ...newSave('준우', 3),
+      team: [{ speciesId: 42, level: 10, exp: 0 }],
+    });
+    expect(loadSave(fakeStorage({ [SAVE_KEY]: old }))?.ropes).toEqual({ basic: 5, sturdy: 1 });
+  });
+  it('옛 v1에 스타터가 없으면 빈 팀', () => {
+    expect(parseSave(JSON.stringify({ name: 'a', characterIndex: 0 }))?.team).toEqual([]);
+  });
   it('망가진 값은 무시한다', () => {
     expect(parseSave('{{')).toBeNull();
     expect(parseSave(JSON.stringify({ name: '', characterIndex: 0 }))).toBeNull();
     expect(parseSave(JSON.stringify({ name: 'a', characterIndex: 9 }))).toBeNull();
+    expect(parseSave(JSON.stringify({ version: 99, name: 'a', characterIndex: 0 }))).toBeNull();
     expect(loadSave(fakeStorage({ [SAVE_KEY]: 'x' }))).toBeNull();
   });
-  it('스타터가 없으면 null', () => {
-    expect(parseSave(JSON.stringify({ name: 'a', characterIndex: 0 }))?.starterId).toBeNull();
+  it('v2의 이상한 항목은 걸러내고 팀은 6마리까지', () => {
+    const raw = JSON.stringify({
+      ...data,
+      team: [...Array(8).fill({ speciesId: 1, level: 5, exp: 0 }), { speciesId: -1, level: 5 }, 'x'],
+      ropes: { basic: -3, sturdy: 'a' },
+      coins: 'many',
+    });
+    const parsed = parseSave(raw);
+    expect(parsed?.team).toHaveLength(6);
+    expect(parsed?.ropes).toEqual({ basic: 5, sturdy: 0 });
+    expect(parsed?.coins).toBe(0);
   });
   it('저장소가 던져도 죽지 않는다', () => {
     const boom = () => { throw new Error('x'); };

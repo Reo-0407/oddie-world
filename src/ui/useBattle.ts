@@ -40,6 +40,7 @@ export function useBattle(initial: BattleState) {
   const [shown, setShown] = useState(() => shownFrom(initial));
   const [message, setMessage] = useState('어떻게 할까?');
   const [playing, setPlaying] = useState(false);
+  const [caught, setCaught] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -92,5 +93,24 @@ export function useBattle(initial: BattleState) {
     finishTurn(resolveForcedSwitch(state, side, teamIndex));
   }, [finishTurn, state]);
 
-  return { state, shown, message, playing, act, forceSwitch };
+  /** 로프 던지기: 성공이면 포획으로 끝, 실패면 내 차례를 쓰고 상대가 한 턴 행동한다 */
+  const throwRope = useCallback((success: boolean) => {
+    const wildName = activeOf(state, 1).name;
+    setPlaying(true);
+    setMessage('로프를 던졌다!');
+    timer.current = setTimeout(() => {
+      if (success) {
+        setMessage(`${wildName}을(를) 잡았다!`);
+        setCaught(true);
+        setPlaying(false);
+        return;
+      }
+      setMessage('로프가 풀려 버렸다!');
+      timer.current = setTimeout(() => {
+        finishTurn(resolveTurn(state, [{ kind: 'pass' }, chooseAiAction(state, 1)]));
+      }, EVENT_DELAY_MS);
+    }, EVENT_DELAY_MS);
+  }, [finishTurn, state]);
+
+  return { state, shown, message, playing, caught, act, forceSwitch, throwRope };
 }
