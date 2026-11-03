@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { speciesById } from '../data/index.ts';
-import { buildCharacter, CHARACTERS, disposeObject } from '../world/characters.ts';
+import { buildCharacter, CHARACTERS, disposeObject, loadCharacterModel } from '../world/characters.ts';
 import {
   clampToArea, distance, DUEL_RANGE, inputToWorld, joystickToMove, keysToMove, NOTICE_RANGE, type Vec2,
 } from '../world/math.ts';
@@ -152,10 +152,24 @@ export function WorldView({ name, characterIndex, playerLevel, paused, onDuel }:
     }
 
     // 플레이어
-    const player = buildCharacter(CHARACTERS[characterIndex] ?? CHARACTERS[0]);
+    const look = CHARACTERS[characterIndex] ?? CHARACTERS[0];
+    const player = new THREE.Group(); // 통통·기울임 애니메이션을 받는 몸
+    let playerFallback: THREE.Object3D | null = buildCharacter(look);
+    let playerModel: THREE.Object3D | null = null;
+    player.add(playerFallback);
     const playerRoot = new THREE.Group();
     playerRoot.add(player);
     scene.add(playerRoot);
+    void loadCharacterModel(look).then((model) => {
+      if (disposed || !model) return; // 실패하면 원시 도형 인간형을 그대로 쓴다
+      if (playerFallback) {
+        player.remove(playerFallback);
+        disposeObject(playerFallback);
+        playerFallback = null;
+      }
+      playerModel = model;
+      player.add(model);
+    });
     const playerPos: Vec2 = { x: 0, z: 0 };
     let playerHeading = Math.PI;
 
@@ -323,6 +337,7 @@ export function WorldView({ name, characterIndex, playerLevel, paused, onDuel }:
         playerRoot.position.set(playerPos.x, 0, playerPos.z);
         playerRoot.rotation.y = playerHeading;
         player.position.y = moving ? Math.abs(Math.sin(clock * 12)) * 0.08 : 0;
+        player.rotation.z = moving ? Math.sin(clock * 12) * 0.1 : 0;
 
         // 야생 오디
         nearest = null;
@@ -385,6 +400,7 @@ export function WorldView({ name, characterIndex, playerLevel, paused, onDuel }:
       window.removeEventListener('blur', onBlur);
       for (const wild of wilds) wild.fallback?.dispose();
       disposeObject(player);
+      if (playerModel) disposeObject(playerModel);
       for (const pending of templates.values()) {
         void pending.then((template) => { if (template) disposeObject(template); });
       }

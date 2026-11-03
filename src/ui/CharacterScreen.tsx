@@ -1,23 +1,10 @@
 import { useState } from 'react';
 import { CHARACTERS } from '../world/characters.ts';
+import { CharacterPreview } from './CharacterPreview.tsx';
 
 interface Props {
   initialName?: string;
   onDone: (name: string, characterIndex: number) => void;
-}
-
-/** 색으로 구분되는 간단한 사람 모양 미리보기 */
-function Figure({ body, hair, skin }: { body: string; hair: string; skin: string }) {
-  return (
-    <svg viewBox="0 0 60 80" width="60" height="80" aria-hidden="true">
-      <rect x="20" y="50" width="20" height="26" rx="3" fill="#3b3f4a" />
-      <rect x="14" y="28" width="32" height="28" rx="4" fill={body} />
-      <rect x="6" y="30" width="8" height="24" rx="3" fill={body} />
-      <rect x="46" y="30" width="8" height="24" rx="3" fill={body} />
-      <circle cx="30" cy="18" r="12" fill={skin} />
-      <path d="M17 17 A13 13 0 0 1 43 17 Z" fill={hair} />
-    </svg>
-  );
 }
 
 export function CharacterScreen({ initialName = '', onDone }: Props) {
@@ -36,6 +23,7 @@ export function CharacterScreen({ initialName = '', onDone }: Props) {
           onChange={(event) => setName(event.target.value)}
         />
       </label>
+      <CharacterPreview index={index} />
       <div className="characters">
         {CHARACTERS.map((look, i) => (
           <button
@@ -44,7 +32,6 @@ export function CharacterScreen({ initialName = '', onDone }: Props) {
             aria-pressed={i === index}
             onClick={() => setIndex(i)}
           >
-            <Figure body={look.body} hair={look.hair} skin={look.skin} />
             {look.label}
           </button>
         ))}

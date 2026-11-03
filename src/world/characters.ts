@@ -1,19 +1,46 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 export interface CharacterLook {
   label: string;
-  body: string; // 옷 색
-  hair: string; // 머리 색
+  file: string; // public/characters/ 안의 GLB 파일 이름
+  body: string; // GLB를 못 불러올 때 쓰는 대체 인간형의 옷 색
+  hair: string;
   skin: string;
 }
 
-/** 캐릭터 4종: 몸색/머리색만 다른 로우폴리 인간형 */
+/** 캐릭터 6종 (GLB). 순서가 저장 번호이므로 바꾸지 말고 뒤에만 추가한다 */
 export const CHARACTERS: readonly CharacterLook[] = [
-  { label: '빨강 모자', body: '#d94f3d', hair: '#3a2a20', skin: '#f2c9a0' },
-  { label: '파랑 바람막이', body: '#3b82d6', hair: '#e0b040', skin: '#e8b88e' },
-  { label: '초록 탐험가', body: '#3bb273', hair: '#1f1f26', skin: '#f6d3b0' },
-  { label: '보라 마법사', body: '#8a5cd0', hair: '#c8d0d8', skin: '#d9a77c' },
+  { label: '모험가', file: 'adventurer.glb', body: '#d94f3d', hair: '#3a2a20', skin: '#f2c9a0' },
+  { label: '캐주얼', file: 'casual.glb', body: '#3b82d6', hair: '#e0b040', skin: '#e8b88e' },
+  { label: '농부', file: 'farmer.glb', body: '#3bb273', hair: '#1f1f26', skin: '#f6d3b0' },
+  { label: '펑크', file: 'punk.glb', body: '#8a5cd0', hair: '#c8d0d8', skin: '#d9a77c' },
+  { label: '해변', file: 'beach.glb', body: '#f0a030', hair: '#5a3a20', skin: '#e8b88e' },
+  { label: '왕', file: 'king.glb', body: '#c0392b', hair: '#d8d8d8', skin: '#f2c9a0' },
 ];
+
+export const PLAYER_HEIGHT = 1.6;
+
+export function characterUrl(look: CharacterLook): string {
+  return `${import.meta.env.BASE_URL}characters/${look.file}`;
+}
+
+/** GLB를 불러와 높이를 맞추고 발을 y=0, 가운데를 x/z=0에 둔 그룹을 돌려준다. 실패하면 null */
+export async function loadCharacterModel(look: CharacterLook, height = PLAYER_HEIGHT): Promise<THREE.Group | null> {
+  try {
+    const gltf = await new GLTFLoader().loadAsync(characterUrl(look));
+    const wrapper = new THREE.Group();
+    wrapper.add(gltf.scene);
+    const size = new THREE.Box3().setFromObject(wrapper).getSize(new THREE.Vector3());
+    if (size.y > 0) gltf.scene.scale.setScalar(height / size.y);
+    const fitted = new THREE.Box3().setFromObject(wrapper);
+    const center = fitted.getCenter(new THREE.Vector3());
+    gltf.scene.position.set(-center.x, -fitted.min.y, -center.z);
+    return wrapper;
+  } catch {
+    return null;
+  }
+}
 
 /** 원시 도형으로 조립한 인간형. 발이 y=0, 키 약 1.4 */
 export function buildCharacter(look: CharacterLook): THREE.Group {

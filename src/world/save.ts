@@ -1,5 +1,5 @@
 export const SAVE_KEY = 'oddie-world-save-v1';
-export const CHARACTER_COUNT = 4;
+export const CHARACTER_COUNT = 6; // 옛 저장(0~3)도 그대로 유효
 
 export interface SaveData {
   name: string;
