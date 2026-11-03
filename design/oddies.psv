@@ -1,0 +1,169 @@
+# 오디 165종 설계 원본. 이름과 지역과 등급은 로블록스 스튜디오/src/.../SpeciesConfig.luau와 같다.
+# 열: id | 이름 | 타입1 | 타입2(-는 없음) | 역할 | 고유 기술 | 효과(+로 최대 2개) | 고유 기술 타입(생략하면 타입1)
+# 역할: bal 균형, bru 공격 탱커, can 특수 대포, tnk 탱커, wal 특수 벽, spd 속공, mag 빠른 특수, gls 유리대포, sup 보조
+# 효과 코드는 docs/superpowers/specs/2026-11-02-oddie-battle-design.md 의 「특수 효과」 표를 본다. 앞에 !가 있으면 데미지 없는 변화 기술
+001|Pippo|gra|-|bal|솜털 터뜨리기|dn_spe
+002|Mooli|gra|-|wal|이끼 정원|drn+dn_spe
+003|Bumbo|gra|gro|tnk|그루터기 박치기|flin
+004|Fluffo|nor|gra|sup|솜 베개|!slp
+005|Spriggy|gra|-|spd|새싹 도약|pri
+006|Moomoo|nor|gra|tnk|종소리 되새김|!heal
+007|Bloombo|gra|fai|mag|꽃잎 개화|up_spa
+008|Stumpo|gra|fig|bru|느릿 어깨치기|rev
+009|Bramblet|gra|-|gls|가시꼬리 회전|hit2
+010|Sunhorn|gra|fir|can|태양 뿔 광선|cha+brn
+011|Mossaurus|gra|roc|bru|이끼 꼬리 후리기|dn_def
+012|Verdantus|gra|gro|tnk|숲의 뿌리|trp+drn
+013|Pebbi|gro|-|bal|모래 튀기기|crit
+014|Cacto|gra|gro|tnk|가시 껴안기|!shield
+015|Duney|gro|-|wal|모래 언덕 무너뜨리기|dn_spe
+016|Tumblee|gro|nor|spd|회전초 구르기|hit3
+017|Pricklo|gro|gra|tnk|가시 울타리|trp
+018|Scorcho|gro|poi|gls|달군 꼬리침|crit+psn
+019|Oasiso|wat|gro|sup|오아시스 물주머니|!cleanse
+020|Sandjaw|gro|dar|bru|모래 크게 물기|rec
+021|Sunback|gro|fir|tnk|황금 등껍질 반사|rev+brn
+022|Pyramodd|gro|roc|wal|폐허 석판 낙하|dly
+023|Dunecrown|gro|nor|bru|혹 속 물대포|dn_def|wat
+024|Mirajinn|gho|fir|mag|신기루 일렁임|conf
+025|Saharion|gro|fir|can|일몰 원반 폭발|ovr+brn
+026|Snowbi|ice|-|bal|눈덩이 던지기|dn_spe
+027|Chillo|ice|wat|wal|서리 잔 쏟기|!dn2_atk
+028|Iciki|ice|fly|mag|고드름 귀 울림|piv
+029|Frosto|ice|fir|tnk|서리 난로|!shield
+030|Slushi|ice|wat|sup|슬러시 끈적임|!par
+031|Snowler|ice|nor|spd|눈보라 꼬리|pri
+032|Icetusk|ice|gro|bru|얼음 엄니 찌르기|flin
+033|Glaciboo|ice|roc|tnk|동굴 쿵쿵|up_def
+034|Auroruff|ice|fai|mag|오로라 꼬리|slp
+035|Frosthorn|ice|roc|bru|수정 뿔 박치기|rec
+036|Cryowl|ice|psy|can|서리 깃털 눈빛|dly
+037|Glacior|ice|gro|tnk|빙하 계단 낙하|cha
+038|Whiteveil|gho|ice|wal|흰 천 휘감기|!slp
+039|Borealith|ice|dra|can|왕관 빙창|pun
+040|Ashy|fir|dar|spd|재 가루 날리기|pri
+041|Coalbo|fir|roc|tnk|석탄 화로|up_def
+042|Emberi|fir|gho|mag|등불 번쩍|crit+brn
+043|Magmo|fir|roc|bru|용암 집게|rec+brn
+044|Cracklo|fir|roc|wal|굴뚝 연기|!brn
+045|Smokko|fir|fig|bru|깨진 방패 부수기|dn_def
+046|Lavump|fir|-|can|용암 국자 퍼붓기|ovr
+047|Eruptix|fir|gro|can|등줄기 분출|cha
+048|Moltenhorn|fir|roc|bru|용암 뿔 들이받기|flin+brn
+049|Calderon|fir|roc|tnk|분화구 열기|!cleanse
+050|Pyroclast|fir|roc|mag|화산암 삼각진|hit3
+051|Magmorax|fir|gro|bru|지각 판 압착|trp
+052|Cindermaw|fir|dar|gls|불씨 물어뜯기|low+brn
+053|Obsidian Wyrm|fir|dra|spd|흑요석 비늘 쏘기|hit2
+054|Vulkarion|fir|gro|can|대분화|ovr+brn
+055|Shroomi|gra|poi|bal|포자 훅|psn
+056|Puffo|gra|poi|sup|포자 구름|!psn
+057|Sporee|gra|fai|mag|포자 후광|!slp
+058|Funglo|gra|gho|wal|야광 등불|!dn2_spd
+059|Shroomble|gra|gro|bru|버섯 삽질|crit
+060|Sporeback|gra|roc|tnk|포자 껍질 폭발|rev+psn
+061|Mushmunch|gra|dar|gls|와구와구|drn
+062|Glowcap|gra|fai|can|광선 갓|cha
+063|Mycelord|gra|dar|bal|뿌리 왕관|trp
+064|Moonshroom|gra|psy|wal|달빛 갓|slp
+065|Spore Crown|gra|poi|can|포자 부채|hit2
+066|Ancient Mycelium|gra|roc|tnk|오래된 뿌리|!cleanse
+067|Parasite King|gra|psy|mag|세뇌 포자|conf
+068|Spore Leviathan|gra|dra|bru|포자 파도|dn_spe
+069|THE OVERGROWTH|gra|gro|tnk|모든 것을 덮는 성장|!up2_def
+070|THE HIVE MIND|gra|psy|can|집단 의식|hit3
+071|Gummi|fai|-|tnk|말랑 튕기기|dn_atk
+072|Jellybo|fai|wat|wal|젤리 늘어뜨리기|dn_spe
+073|Gumblop|fai|nor|bal|풍선껌 터뜨리기|conf
+074|Marshmello|fai|nor|sup|마시멜로 구름|!slp
+075|Candycoil|fai|poi|gls|사탕 지팡이 감기|trp
+076|Chocobite|fai|bug|bru|초콜릿 껍질 깨물기|rec
+077|Sugarush|fai|ele|spd|설탕 스프링 질주|up_spe
+078|Candicorn|fai|psy|mag|막대사탕 뿔|pri
+079|Gumzilla|fai|ste|bru|껌 탱크 포격|ovr
+080|Choco Crown|fai|dar|bal|왕관 초콜릿|drn
+081|Sugar Colossus|fai|roc|tnk|설탕 계단 낙하|cha
+082|Candy Hydra|fai|dra|can|세 가지 맛 숨결|hit3
+083|Gummy Emperor|fai|dra|wal|젤리 망토|par
+084|Cottonkin|fai|fly|sup|솜사탕 다리|!heal
+085|Jawbreaker|fai|roc|bru|사탕 부수기|pun
+086|THE SUGARSTORM|fai|ice|can|설탕 폭풍|dly
+087|Candyrealm|fai|gro|tnk|사탕 왕국의 축복|!up2_spd
+088|Laggo|psy|-|wal|지연 잔상|dly
+089|Errbo|ste|-|bal|경고창|conf
+090|Desynco|psy|ele|bal|싱크 어긋남|rev
+091|Fragment|ste|psy|bal|조각 맞춤|hit3
+092|Corrupto|dar|psy|gls|찢어진 껍질|crit
+093|Reverso|psy|fig|spd|거꾸로 걷기|piv
+094|Nullhorn|dar|psy|can|빈 뿔 광선|pct
+095|404DDIE|ele|ste|bal|페이지 없음|gam
+096|Duplic8|psy|nor|spd|복제 돌진|hit2
+097|Pixel Eater|dar|ele|gls|픽셀 삼키기|drn
+098|CORRUPTED ONE|dar|gho|can|손상 파편|pun
+099|NULL|gho|psy|wal|공허 윤곽|pct
+100|OVERFLOW|ele|ste|tnk|데이터 넘침|gam
+101|LOST FILE|psy|gho|mag|문서 복구 불가|dly
+102|VOID WALKER|gho|dar|spd|맵 밖 걷기|pri
+103|SYSTEM FAILURE|ele|ste|tnk|일시 정지|par
+104|UNDEFINED|psy|dar|can|정의 안 됨|gam
+105|THE ERROR|dar|ele|can|오류 폭주|ovr
+106|[REDACTED]|dar|gho|mag|검열|!dn2_spa
+107|Bubblit|wat|-|bal|거품 방울|dn_atk
+108|Glowfin|wat|ele|mag|이마 등불 번쩍|par
+109|Clampy|wat|roc|tnk|조개 닫기|!shield
+110|Lanternix|wat|dar|can|미끼 등불|trp
+111|Jellowisp|wat|ele|wal|해파리 촉수|conf
+112|Inkaroo|wat|dar|spd|먹물 뿌리기|pri
+113|Coralump|wat|roc|tnk|산호 가시|rev
+114|Anglerfang|wat|dar|gls|바늘니 물기|pun
+115|Tidegrip|wat|fig|bru|큰 집게 으스러뜨리기|trp
+116|Abyssquid|wat|dar|can|촉수 휘감기|pct
+117|Pearlmaw|wat|fai|tnk|진주 반사|!up2_spd
+118|Voltray|wat|ele|mag|전기 가오리 날개|par
+119|Trenchtitan|wat|roc|bru|해구 거인 주먹|flin
+120|Kraklash|wat|dar|gls|크라켄 채찍|hit3
+121|Leviacoil|wat|dra|bal|바다뱀 똬리|trp
+122|Drownmaw|wat|dar|bru|익사의 아가리|low
+123|Hadalord|wat|dar|can|심해 왕관|dly
+124|Blackwater|wat|gho|wal|검은 물 소용돌이|dn_spd
+125|Abyssion|wat|dra|can|심연 포효|cha
+126|THE DEEP|wat|dar|tnk|거대한 눈|pct
+127|Puffcloud|fly|fai|sup|졸린 구름|!slp
+128|Twinklet|fai|-|spd|반짝 점프|pri
+129|Moonbun|fai|psy|mag|초승달 도약|piv
+130|Starwing|fly|psy|spd|별자리 날갯짓|hit3
+131|Haloop|fai|fly|wal|후광 회복|!heal
+132|Nimbusk|ele|nor|bru|번개 뿔|par
+133|Cometail|ice|fly|spd|혜성 꼬리|up_spe
+134|Aurorix|fly|dra|mag|오로라 커튼|conf
+135|Seraphowl|psy|fly|can|여섯 날개|up_spa
+136|Galaxor|fig|psy|bru|은하수 주먹|low
+137|Lunaroc|fly|psy|gls|초승달 날개|crit
+138|Solflare|fir|fai|can|태양 화염 고리|cha+brn
+139|Zenithorn|fai|nor|bru|빛줄기 뿔|pri
+140|Nebulynx|psy|dar|spd|성운 발톱|crit
+141|Starforge|fir|ste|bru|별 용광로 망치|ovr+brn
+142|Eclipsar|dar|fir|can|일식 코로나|dly
+143|Cherubrute|fai|fig|bru|금간 후광 주먹|rec
+144|Throneguard|ste|fai|tnk|빛의 방패|!shield
+145|Voidangel|dar|fly|mag|검은 날개|piv
+146|Celestion|dra|fly|can|별빛 숨결|up_spa
+147|THE FIRMAMENT|psy|fly|can|밤하늘 낙하|cha
+148|Heaven's Eye|psy|fai|mag|천공의 눈|pct
+149|Lucky Box|nor|fai|bal|행운 상자 열기|gam
+150|Peanutty|nor|-|bal|포장 땅콩 튕기기|hit3
+151|Poppo|nor|wat|tnk|뾱뾱이 터뜨리기|rev
+152|Cardbo|nor|-|tnk|박스 박치기|!up2_def
+153|Tapey|nor|ste|wal|테이프 감기|trp
+154|Clovo|gra|fai|sup|네잎 행운|!heal
+155|Horsey|ste|fai|bru|말굽 한방|crit
+156|Ladybo|bug|fai|spd|무당벌레 점박이|hit2
+157|Starlo|fai|psy|mag|유성 꼬리|pri
+158|Rainbowl|fai|ste|can|무지개 금화|up_spa
+159|Coinzo|ste|fai|tnk|금화 한 닢|rev
+160|Goldrake|dra|ste|bru|황금 비늘|up_atk
+161|Fortunox|dra|fai|can|운명의 소용돌이|gam
+162|Silver Lucky Box|ste|fai|bal|은빛 행운 상자|gam
+163|Golden Lucky Box|ste|fai|bru|금빛 행운|gam
+164|Crystal Lucky Box|psy|fai|can|수정 행운|gam
+165|Cosmic Lucky Box|psy|fai|bal|우주 행운|gam

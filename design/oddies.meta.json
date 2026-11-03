@@ -1,0 +1,992 @@
+[
+ {
+  "id": "OD-001",
+  "name": "Pippo",
+  "region": "Meadow",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-002",
+  "name": "Mooli",
+  "region": "Meadow",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-003",
+  "name": "Bumbo",
+  "region": "Meadow",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-004",
+  "name": "Fluffo",
+  "region": "Meadow",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-005",
+  "name": "Spriggy",
+  "region": "Meadow",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-006",
+  "name": "Moomoo",
+  "region": "Meadow",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-007",
+  "name": "Bloombo",
+  "region": "Meadow",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-008",
+  "name": "Stumpo",
+  "region": "Meadow",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-009",
+  "name": "Bramblet",
+  "region": "Meadow",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-010",
+  "name": "Sunhorn",
+  "region": "Meadow",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-011",
+  "name": "Mossaurus",
+  "region": "Meadow",
+  "rarity": "Secret"
+ },
+ {
+  "id": "OD-012",
+  "name": "Verdantus",
+  "region": "Meadow",
+  "rarity": "???"
+ },
+ {
+  "id": "OD-013",
+  "name": "Pebbi",
+  "region": "Desert",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-014",
+  "name": "Cacto",
+  "region": "Desert",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-015",
+  "name": "Duney",
+  "region": "Desert",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-016",
+  "name": "Tumblee",
+  "region": "Desert",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-017",
+  "name": "Pricklo",
+  "region": "Desert",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-018",
+  "name": "Scorcho",
+  "region": "Desert",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-019",
+  "name": "Oasiso",
+  "region": "Desert",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-020",
+  "name": "Sandjaw",
+  "region": "Desert",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-021",
+  "name": "Sunback",
+  "region": "Desert",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-022",
+  "name": "Pyramodd",
+  "region": "Desert",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-023",
+  "name": "Dunecrown",
+  "region": "Desert",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-024",
+  "name": "Mirajinn",
+  "region": "Desert",
+  "rarity": "Secret"
+ },
+ {
+  "id": "OD-025",
+  "name": "Saharion",
+  "region": "Desert",
+  "rarity": "???"
+ },
+ {
+  "id": "OD-026",
+  "name": "Snowbi",
+  "region": "Frozen",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-027",
+  "name": "Chillo",
+  "region": "Frozen",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-028",
+  "name": "Iciki",
+  "region": "Frozen",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-029",
+  "name": "Frosto",
+  "region": "Frozen",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-030",
+  "name": "Slushi",
+  "region": "Frozen",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-031",
+  "name": "Snowler",
+  "region": "Frozen",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-032",
+  "name": "Icetusk",
+  "region": "Frozen",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-033",
+  "name": "Glaciboo",
+  "region": "Frozen",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-034",
+  "name": "Auroruff",
+  "region": "Frozen",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-035",
+  "name": "Frosthorn",
+  "region": "Frozen",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-036",
+  "name": "Cryowl",
+  "region": "Frozen",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-037",
+  "name": "Glacior",
+  "region": "Frozen",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-038",
+  "name": "Whiteveil",
+  "region": "Frozen",
+  "rarity": "Secret"
+ },
+ {
+  "id": "OD-039",
+  "name": "Borealith",
+  "region": "Frozen",
+  "rarity": "???"
+ },
+ {
+  "id": "OD-040",
+  "name": "Ashy",
+  "region": "Volcano",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-041",
+  "name": "Coalbo",
+  "region": "Volcano",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-042",
+  "name": "Emberi",
+  "region": "Volcano",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-043",
+  "name": "Magmo",
+  "region": "Volcano",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-044",
+  "name": "Cracklo",
+  "region": "Volcano",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-045",
+  "name": "Smokko",
+  "region": "Volcano",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-046",
+  "name": "Lavump",
+  "region": "Volcano",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-047",
+  "name": "Eruptix",
+  "region": "Volcano",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-048",
+  "name": "Moltenhorn",
+  "region": "Volcano",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-049",
+  "name": "Calderon",
+  "region": "Volcano",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-050",
+  "name": "Pyroclast",
+  "region": "Volcano",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-051",
+  "name": "Magmorax",
+  "region": "Volcano",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-052",
+  "name": "Cindermaw",
+  "region": "Volcano",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-053",
+  "name": "Obsidian Wyrm",
+  "region": "Volcano",
+  "rarity": "Secret"
+ },
+ {
+  "id": "OD-054",
+  "name": "Vulkarion",
+  "region": "Volcano",
+  "rarity": "???"
+ },
+ {
+  "id": "OD-055",
+  "name": "Shroomi",
+  "region": "Mushroom",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-056",
+  "name": "Puffo",
+  "region": "Mushroom",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-057",
+  "name": "Sporee",
+  "region": "Mushroom",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-058",
+  "name": "Funglo",
+  "region": "Mushroom",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-059",
+  "name": "Shroomble",
+  "region": "Mushroom",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-060",
+  "name": "Sporeback",
+  "region": "Mushroom",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-061",
+  "name": "Mushmunch",
+  "region": "Mushroom",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-062",
+  "name": "Glowcap",
+  "region": "Mushroom",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-063",
+  "name": "Mycelord",
+  "region": "Mushroom",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-064",
+  "name": "Moonshroom",
+  "region": "Mushroom",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-065",
+  "name": "Spore Crown",
+  "region": "Mushroom",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-066",
+  "name": "Ancient Mycelium",
+  "region": "Mushroom",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-067",
+  "name": "Parasite King",
+  "region": "Mushroom",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-068",
+  "name": "Spore Leviathan",
+  "region": "Mushroom",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-069",
+  "name": "THE OVERGROWTH",
+  "region": "Mushroom",
+  "rarity": "Secret"
+ },
+ {
+  "id": "OD-070",
+  "name": "THE HIVE MIND",
+  "region": "Mushroom",
+  "rarity": "???"
+ },
+ {
+  "id": "OD-071",
+  "name": "Gummi",
+  "region": "Candy",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-072",
+  "name": "Jellybo",
+  "region": "Candy",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-073",
+  "name": "Gumblop",
+  "region": "Candy",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-074",
+  "name": "Marshmello",
+  "region": "Candy",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-075",
+  "name": "Candycoil",
+  "region": "Candy",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-076",
+  "name": "Chocobite",
+  "region": "Candy",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-077",
+  "name": "Sugarush",
+  "region": "Candy",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-078",
+  "name": "Candicorn",
+  "region": "Candy",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-079",
+  "name": "Gumzilla",
+  "region": "Candy",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-080",
+  "name": "Choco Crown",
+  "region": "Candy",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-081",
+  "name": "Sugar Colossus",
+  "region": "Candy",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-082",
+  "name": "Candy Hydra",
+  "region": "Candy",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-083",
+  "name": "Gummy Emperor",
+  "region": "Candy",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-084",
+  "name": "Cottonkin",
+  "region": "Candy",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-085",
+  "name": "Jawbreaker",
+  "region": "Candy",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-086",
+  "name": "THE SUGARSTORM",
+  "region": "Candy",
+  "rarity": "Secret"
+ },
+ {
+  "id": "OD-087",
+  "name": "Candyrealm",
+  "region": "Candy",
+  "rarity": "???"
+ },
+ {
+  "id": "OD-088",
+  "name": "Laggo",
+  "region": "Glitch",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-089",
+  "name": "Errbo",
+  "region": "Glitch",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-090",
+  "name": "Desynco",
+  "region": "Glitch",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-091",
+  "name": "Fragment",
+  "region": "Glitch",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-092",
+  "name": "Corrupto",
+  "region": "Glitch",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-093",
+  "name": "Reverso",
+  "region": "Glitch",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-094",
+  "name": "Nullhorn",
+  "region": "Glitch",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-095",
+  "name": "404DDIE",
+  "region": "Glitch",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-096",
+  "name": "Duplic8",
+  "region": "Glitch",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-097",
+  "name": "Pixel Eater",
+  "region": "Glitch",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-098",
+  "name": "CORRUPTED ONE",
+  "region": "Glitch",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-099",
+  "name": "NULL",
+  "region": "Glitch",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-100",
+  "name": "OVERFLOW",
+  "region": "Glitch",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-101",
+  "name": "LOST FILE",
+  "region": "Glitch",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-102",
+  "name": "VOID WALKER",
+  "region": "Glitch",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-103",
+  "name": "SYSTEM FAILURE",
+  "region": "Glitch",
+  "rarity": "Secret"
+ },
+ {
+  "id": "OD-104",
+  "name": "UNDEFINED",
+  "region": "Glitch",
+  "rarity": "Secret"
+ },
+ {
+  "id": "OD-105",
+  "name": "THE ERROR",
+  "region": "Glitch",
+  "rarity": "???"
+ },
+ {
+  "id": "OD-106",
+  "name": "[REDACTED]",
+  "region": "Glitch",
+  "rarity": "???"
+ },
+ {
+  "id": "OD-107",
+  "name": "Bubblit",
+  "region": "Abyss",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-108",
+  "name": "Glowfin",
+  "region": "Abyss",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-109",
+  "name": "Clampy",
+  "region": "Abyss",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-110",
+  "name": "Lanternix",
+  "region": "Abyss",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-111",
+  "name": "Jellowisp",
+  "region": "Abyss",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-112",
+  "name": "Inkaroo",
+  "region": "Abyss",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-113",
+  "name": "Coralump",
+  "region": "Abyss",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-114",
+  "name": "Anglerfang",
+  "region": "Abyss",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-115",
+  "name": "Tidegrip",
+  "region": "Abyss",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-116",
+  "name": "Abyssquid",
+  "region": "Abyss",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-117",
+  "name": "Pearlmaw",
+  "region": "Abyss",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-118",
+  "name": "Voltray",
+  "region": "Abyss",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-119",
+  "name": "Trenchtitan",
+  "region": "Abyss",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-120",
+  "name": "Kraklash",
+  "region": "Abyss",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-121",
+  "name": "Leviacoil",
+  "region": "Abyss",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-122",
+  "name": "Drownmaw",
+  "region": "Abyss",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-123",
+  "name": "Hadalord",
+  "region": "Abyss",
+  "rarity": "Secret"
+ },
+ {
+  "id": "OD-124",
+  "name": "Blackwater",
+  "region": "Abyss",
+  "rarity": "Secret"
+ },
+ {
+  "id": "OD-125",
+  "name": "Abyssion",
+  "region": "Abyss",
+  "rarity": "???"
+ },
+ {
+  "id": "OD-126",
+  "name": "THE DEEP",
+  "region": "Abyss",
+  "rarity": "???"
+ },
+ {
+  "id": "OD-127",
+  "name": "Puffcloud",
+  "region": "Celestial",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-128",
+  "name": "Twinklet",
+  "region": "Celestial",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-129",
+  "name": "Moonbun",
+  "region": "Celestial",
+  "rarity": "Common"
+ },
+ {
+  "id": "OD-130",
+  "name": "Starwing",
+  "region": "Celestial",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-131",
+  "name": "Haloop",
+  "region": "Celestial",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-132",
+  "name": "Nimbusk",
+  "region": "Celestial",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-133",
+  "name": "Cometail",
+  "region": "Celestial",
+  "rarity": "Rare"
+ },
+ {
+  "id": "OD-134",
+  "name": "Aurorix",
+  "region": "Celestial",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-135",
+  "name": "Seraphowl",
+  "region": "Celestial",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-136",
+  "name": "Galaxor",
+  "region": "Celestial",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-137",
+  "name": "Lunaroc",
+  "region": "Celestial",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-138",
+  "name": "Solflare",
+  "region": "Celestial",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-139",
+  "name": "Zenithorn",
+  "region": "Celestial",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-140",
+  "name": "Nebulynx",
+  "region": "Celestial",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-141",
+  "name": "Starforge",
+  "region": "Celestial",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-142",
+  "name": "Eclipsar",
+  "region": "Celestial",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-143",
+  "name": "Cherubrute",
+  "region": "Celestial",
+  "rarity": "Legendary"
+ },
+ {
+  "id": "OD-144",
+  "name": "Throneguard",
+  "region": "Celestial",
+  "rarity": "Secret"
+ },
+ {
+  "id": "OD-145",
+  "name": "Voidangel",
+  "region": "Celestial",
+  "rarity": "Secret"
+ },
+ {
+  "id": "OD-146",
+  "name": "Celestion",
+  "region": "Celestial",
+  "rarity": "Secret"
+ },
+ {
+  "id": "OD-147",
+  "name": "THE FIRMAMENT",
+  "region": "Celestial",
+  "rarity": "???"
+ },
+ {
+  "id": "OD-148",
+  "name": "Heaven's Eye",
+  "region": "Celestial",
+  "rarity": "???"
+ },
+ {
+  "id": "OD-149",
+  "name": "Lucky Box",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-150",
+  "name": "Peanutty",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-151",
+  "name": "Poppo",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-152",
+  "name": "Cardbo",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-153",
+  "name": "Tapey",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-154",
+  "name": "Clovo",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-155",
+  "name": "Horsey",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-156",
+  "name": "Ladybo",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-157",
+  "name": "Starlo",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-158",
+  "name": "Rainbowl",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-159",
+  "name": "Coinzo",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-160",
+  "name": "Goldrake",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-161",
+  "name": "Fortunox",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-162",
+  "name": "Silver Lucky Box",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-163",
+  "name": "Golden Lucky Box",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-164",
+  "name": "Crystal Lucky Box",
+  "region": "Special",
+  "rarity": "Epic"
+ },
+ {
+  "id": "OD-165",
+  "name": "Cosmic Lucky Box",
+  "region": "Special",
+  "rarity": "Epic"
+ }
+]

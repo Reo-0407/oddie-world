@@ -1,0 +1,123 @@
+:root {
+  --bg: #f4f1e8;
+  --panel: #ffffff;
+  --ink: #23262b;
+  --line: #23262b;
+  --accent: #d94f3d;
+  --hp: #3bb273;
+  --hp-low: #e0523f;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, 'Malgun Gothic', sans-serif;
+}
+
+.screen {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+h1 { font-size: 1.3rem; text-align: center; }
+
+button {
+  min-height: 48px;
+  padding: 8px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.starters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.starter { display: flex; flex-direction: column; align-items: center; }
+
+.arena {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(#cfe8f5 55%, #bcdc9d 55%);
+}
+
+.fighter { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fighter-back { flex-direction: row-reverse; }
+
+.plate {
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.plate-name { font-weight: 700; }
+.status { margin-left: 6px; color: var(--accent); font-size: 0.8rem; }
+
+.hp-bar {
+  height: 10px;
+  margin-top: 6px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
+.hp-fill { height: 100%; background: var(--hp); transition: width 0.4s; }
+.hp-fill.low { background: var(--hp-low); }
+.hp-text { margin-top: 4px; text-align: right; font-size: 0.85rem; }
+
+.message {
+  min-height: 72px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  line-height: 1.4;
+}
+
+.moves { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.move { display: flex; flex-direction: column; align-items: center; }
+.move small { font-weight: 400; }
+.wide { grid-column: 1 / -1; width: 100%; }
+.team { display: grid; gap: 8px; }
+
+footer {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px;
+  font-size: 0.75rem;
+  text-align: center;
+  opacity: 0.7;
+}
+
+.oddie-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  color: #fff;
+  font-size: 1.4rem;
+  font-weight: 800;
+  text-shadow: 0 1px 3px #0008;
+  flex-shrink: 0;
+}
