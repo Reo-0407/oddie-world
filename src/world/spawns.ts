@@ -1,11 +1,13 @@
 /**
  * 월드에 나올 수 있는 야생 오디 번호 = public/models 에 GLB 파일이 있는 종.
- * 갱신 방법: `ls public/models` 로 OD-###.glb 번호를 확인해 아래 배열을 고친다.
+ * 빌드 때 폴더를 읽어 자동으로 채운다(새 모델을 넣으면 따로 고칠 것 없음).
  */
-export const MODEL_SPECIES_IDS: readonly number[] = [
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 20, 21, 23, 26, 27, 28, 29, 30,
-  32, 34, 36, 37, 40, 41, 42, 43, 45, 46, 47, 50, 51, 52, 54, 63, 78, 107,
-];
+export const MODEL_SPECIES_IDS: readonly number[] = Object.keys(
+  import.meta.glob('/public/models/OD-*.glb', { query: '?url', eager: false }),
+)
+  .map((path) => Number(/OD-(\d+)\.glb$/.exec(path)?.[1]))
+  .filter((id) => Number.isInteger(id))
+  .sort((x, y) => x - y);
 
 export function modelUrl(speciesId: number): string {
   return `${import.meta.env.BASE_URL}models/OD-${String(speciesId).padStart(3, '0')}.glb`;
