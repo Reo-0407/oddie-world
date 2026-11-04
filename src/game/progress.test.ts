@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { catchChance, MAX_CATCH_CHANCE, tryCatch } from './capture.ts';
 import { applyExp, coinReward, expToNext, gainExp, MAX_LEVEL } from './growth.ts';
 import { addCaught, highestLevel, MAX_TEAM, type OwnedOddie } from './owned.ts';
-import { settleBattle } from './rewards.ts';
+import { grantExp, settleBattle } from './rewards.ts';
 
 describe('포획 확률', () => {
   it('만피 기본 로프는 등급별 포획률 그대로', () => {
@@ -95,5 +95,17 @@ describe('전투 정산', () => {
     expect(report.team).toHaveLength(3);
     expect(report.team[2]).toEqual({ speciesId: 3, level: 9, exp: 0 });
     expect(report.caught?.toBox).toBe(false);
+  });
+});
+
+describe('전투 밖 경험치', () => {
+  it('선두 오디만 경험치를 받고 레벨업을 알려 준다', () => {
+    const team: OwnedOddie[] = [{ speciesId: 1, level: 10, exp: 100 }, { speciesId: 2, level: 10, exp: 0 }];
+    const result = grantExp(team, 0, 40);
+    expect(result.team[0]).toMatchObject({ level: 11, exp: 10 });
+    expect(result.team[1]).toEqual(team[1]);
+    expect(result.levelUp).toMatchObject({ from: 10, to: 11 });
+    expect(grantExp(team, 5, 40).team).toBe(team);
+    expect(grantExp(team, 1, 5).levelUp).toBeNull();
   });
 });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { chooseAiAction, chooseAiSwitch } from '../engine/ai.ts';
 import { activeOf, resolveForcedSwitch, resolveTurn } from '../engine/turn.ts';
 import type { Action, BattleEvent, BattleState, SideIndex, TurnResult } from '../engine/types.ts';
+import type { RopeSequence } from '../game/capture.ts';
 import { eventMessage } from './messages.ts';
 
 const EVENT_DELAY_MS = 900;
@@ -35,7 +36,17 @@ function applyToShown(shown: Shown, event: BattleEvent): Shown {
   return next;
 }
 
-export function useBattle(initial: BattleState) {
+export interface BattleHooks {
+  /** 이벤트가 재생될 때마다 (3D 연출용) */
+  onEvent?: (event: BattleEvent) => void;
+  /** 로프 던지기 3D 연출. 잡혔으면 true. 없으면 잠깐 기다리기만 한다 */
+  playRope?: (seq: RopeSequence) => Promise<boolean>;
+}
+
+export function useBattle(initial: BattleState, hooks: BattleHooks = {}) {
+  const hooksRef = useRef(hooks);
+  hooksRef.current = hooks;
+  const unmounted = useRef(false);
   const [state, setState] = useState(initial);
   const [shown, setShown] = useState(() => shownFrom(initial));
   const [message, setMessage] = useState('어떻게 할까?');
@@ -43,7 +54,13 @@ export function useBattle(initial: BattleState) {
   const [caught, setCaught] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => {
+    unmounted.current = false;
+    return () => {
+      unmounted.current = true;
+      clearTimeout(timer.current);
+    };
+  }, []);
 
   /** 이벤트를 순서대로 보여주고 끝나면 onDone을 부른다 */
   const play = useCallback((events: BattleEvent[], final: BattleState, onDone: () => void) => {
@@ -58,6 +75,7 @@ export function useBattle(initial: BattleState) {
         return;
       }
       const event = events[index++];
+      hooksRef.current.onEvent?.(event);
       setShown((current) => applyToShown(current, event));
       const text = eventMessage(event);
       if (text === null) {
@@ -93,12 +111,16 @@ export function useBattle(initial: BattleState) {
     finishTurn(resolveForcedSwitch(state, side, teamIndex));
   }, [finishTurn, state]);
 
-  /** 로프 던지기: 성공이면 포획으로 끝, 실패면 내 차례를 쓰고 상대가 한 턴 행동한다 */
-  const throwRope = useCallback((success: boolean) => {
+  /** 로프 던지기: 3D 연출이 끝나면 결과를 낸다. 성공이면 포획으로 끝, 실패면 상대가 한 턴 행동한다 */
+  const throwRope = useCallback((seq: RopeSequence) => {
     const wildName = activeOf(state, 1).name;
     setPlaying(true);
     setMessage('로프를 던졌다!');
-    timer.current = setTimeout(() => {
+    const animation = hooksRef.current.playRope
+      ? hooksRef.current.playRope(seq)
+      : new Promise<boolean>((resolve) => { timer.current = setTimeout(() => resolve(seq.success), EVENT_DELAY_MS); });
+    void animation.then((success) => {
+      if (unmounted.current) return;
       if (success) {
         setMessage(`${wildName}을(를) 잡았다!`);
         setCaught(true);
@@ -109,7 +131,7 @@ export function useBattle(initial: BattleState) {
       timer.current = setTimeout(() => {
         finishTurn(resolveTurn(state, [{ kind: 'pass' }, chooseAiAction(state, 1)]));
       }, EVENT_DELAY_MS);
-    }, EVENT_DELAY_MS);
+    });
   }, [finishTurn, state]);
 
   return { state, shown, message, playing, caught, act, forceSwitch, throwRope };

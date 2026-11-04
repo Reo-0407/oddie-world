@@ -2,7 +2,7 @@ import { MOVES, speciesById } from '../data/index.ts';
 import { applyExp, coinReward, gainExp } from './growth.ts';
 import { addCaught, type OwnedOddie } from './owned.ts';
 
-export type BattleOutcome = 'won' | 'lost' | 'caught';
+export type BattleOutcome = 'won' | 'lost' | 'caught' | 'fled';
 
 export interface LevelUp {
   name: string;
@@ -64,4 +64,22 @@ export function settleBattle(input: SettleInput): BattleReport {
     report.caught = { name: wild.name, toBox: added.toBox };
   }
   return report;
+}
+
+/** 전투 밖에서 선두 오디가 경험치만 받을 때(출동 승리) */
+export function grantExp(team: OwnedOddie[], index: number, exp: number): { team: OwnedOddie[]; levelUp: LevelUp | null } {
+  const oddie = team[index];
+  if (!oddie) return { team, levelUp: null };
+  const species = speciesById(oddie.speciesId);
+  const result = applyExp(oddie.level, oddie.exp, exp, species.learnset);
+  const next = team.map((member, i) => (i === index ? { ...member, level: result.level, exp: result.exp } : member));
+  const levelUp = result.level > oddie.level
+    ? {
+      name: species.name,
+      from: oddie.level,
+      to: result.level,
+      newMoves: result.newMoveIds.map((id) => MOVES[id]?.name ?? `기술 ${id}`),
+    }
+    : null;
+  return { team: next, levelUp };
 }
