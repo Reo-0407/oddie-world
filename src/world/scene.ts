@@ -762,8 +762,15 @@ export class WorldScene {
       let sideX = -dz / length;
       let sideZ = dx / length;
       if (sideZ < 0) { sideX = -sideX; sideZ = -sideZ; } // 항상 화면 아래쪽에서 바라본다
-      goal = new THREE.Vector3(midX + sideX * 5.2 - (dx / length) * 1.2, 2.6, midZ + sideZ * 5.2 - (dz / length) * 1.2);
-      focus = new THREE.Vector3(midX, 0.9, midZ);
+      // 세로로 긴 화면에서도 두 오디가 다 들어오게 화면 비율에 맞춰 물러난다
+      const halfTan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+      const dist = Math.max(5.2, (BATTLE_GAP / 2 + 1.2) / (this.camera.aspect * halfTan));
+      const height = 2.4 + dist * 0.18;
+      goal = new THREE.Vector3(midX + sideX * dist, height, midZ + sideZ * dist);
+      // 아래쪽 메뉴가 화면을 가리므로, 카메라를 조금 더 숙여 두 오디를 화면 위쪽에 올린다
+      const below = Math.atan((height - 0.7) / dist);
+      const focusDist = height / Math.tan(below + 0.21);
+      focus = new THREE.Vector3(goal.x - sideX * focusDist, 0, goal.z - sideZ * focusDist);
     } else {
       goal = new THREE.Vector3(this.playerPos.x, 5.5, this.playerPos.z + 7);
       focus = new THREE.Vector3(this.playerPos.x, 1, this.playerPos.z);

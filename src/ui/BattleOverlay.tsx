@@ -124,8 +124,6 @@ export function BattleOverlay({ initial, team, box, ropes, tutorial, scene, onFi
     <div className="battle-overlay">
       <div className="b-top">
         <Plate pokemon={opponent.team[shown.active[1]]} hp={shown.hp[1]} showHp={false} />
-      </div>
-      <div className="b-top b-top-me">
         <Plate pokemon={player.team[shown.active[0]]} hp={myShownHp} showHp />
       </div>
 

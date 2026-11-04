@@ -236,8 +236,7 @@ footer {
 .battle-overlay { position: absolute; inset: 0; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
 .battle-overlay > * { pointer-events: auto; }
 .b-top { display: flex; gap: 8px; padding: 8px 8px 0; }
-.b-top-me { justify-content: flex-end; padding-top: 4px; }
-.b-plate { max-width: 62%; padding: 4px 8px; background: rgba(255, 255, 255, 0.85); }
+.b-plate { flex: 1; min-width: 0; padding: 4px 8px; background: rgba(255, 255, 255, 0.85); }
 .b-bottom {
   display: flex;
   flex-direction: column;
