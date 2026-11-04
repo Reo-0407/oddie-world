@@ -21,6 +21,8 @@ export interface SaveData {
   coins: number;
   /** 팀 최고 레벨 (팀이 비면 시작 레벨) */
   playerLevel: number;
+  /** 첫 결투(튜토리얼)를 마쳤는지 */
+  tutorialDone: boolean;
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -37,6 +39,7 @@ export function newSave(name: string, characterIndex: number): SaveData {
   return {
     version: SAVE_VERSION, name, characterIndex, team: [], box: [],
     ropes: { ...START_ROPES }, coins: 0, playerLevel: START_LEVEL,
+    tutorialDone: false,
   };
 }
 
@@ -81,6 +84,8 @@ export function parseSave(raw: string | null): SaveData | null {
       sturdy: isCount(ropes.sturdy) ? ropes.sturdy : 0,
     };
     base.coins = isCount(data.coins) ? data.coins : 0;
+    // 필드가 없는 옛 v2는 이미 돈을 번 적이 있으면 튜토리얼을 마친 걸로 본다
+    base.tutorialDone = typeof data.tutorialDone === 'boolean' ? data.tutorialDone : base.coins > 0;
     base.playerLevel = isCount(data.playerLevel) && data.playerLevel >= 1 ? data.playerLevel : START_LEVEL;
     return base;
   } catch {

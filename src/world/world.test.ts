@@ -90,6 +90,7 @@ describe('저장', () => {
     ropes: { basic: 3, sturdy: 2 },
     coins: 120,
     playerLevel: 12,
+    tutorialDone: true,
   };
   it('쓰고 읽는다', () => {
     const s = fakeStorage();
@@ -127,6 +128,13 @@ describe('저장', () => {
     expect(parsed?.team).toHaveLength(6);
     expect(parsed?.ropes).toEqual({ basic: 5, sturdy: 0 });
     expect(parsed?.coins).toBe(0);
+  });
+  it('tutorialDone: 없으면 false(코인이 있으면 true), 있으면 그대로', () => {
+    const { tutorialDone: _omit, ...rest } = data;
+    expect(parseSave(JSON.stringify({ ...rest, coins: 0 }))?.tutorialDone).toBe(false);
+    expect(parseSave(JSON.stringify(rest))?.tutorialDone).toBe(true);
+    expect(parseSave(JSON.stringify({ ...data, tutorialDone: false }))?.tutorialDone).toBe(false);
+    expect(newSave('a', 0).tutorialDone).toBe(false);
   });
   it('저장소가 던져도 죽지 않는다', () => {
     const boom = () => { throw new Error('x'); };
