@@ -89,6 +89,7 @@ describe('저장', () => {
     box: [{ speciesId: 3, level: 8, exp: 0 }],
     ropes: { basic: 3, sturdy: 2 },
     coins: 120,
+    potions: 2,
     playerLevel: 12,
     tutorialDone: true,
   };
@@ -103,9 +104,19 @@ describe('저장', () => {
     const old = JSON.stringify({ name: '준우', characterIndex: 3, starterId: 42 });
     expect(parseSave(old)).toEqual({
       ...newSave('준우', 3),
+      coins: 0, // 옛 저장은 시작 코인을 받지 않는다
       team: [{ speciesId: 42, level: 10, exp: 0 }],
     });
     expect(loadSave(fakeStorage({ [SAVE_KEY]: old }))?.ropes).toEqual({ basic: 5, sturdy: 1 });
+  });
+  it('v2 저장은 potions 0으로 옮기고 나머지는 그대로', () => {
+    const { potions: _p, version: _v, ...rest } = data;
+    const parsed = parseSave(JSON.stringify({ ...rest, version: 2 }));
+    expect(parsed).toEqual({ ...data, potions: 0 });
+    expect(parsed?.version).toBe(3);
+  });
+  it('새 저장은 코인 100, 회복약 0', () => {
+    expect(newSave('a', 0)).toMatchObject({ coins: 100, potions: 0, version: 3 });
   });
   it('옛 v1에 스타터가 없으면 빈 팀', () => {
     expect(parseSave(JSON.stringify({ name: 'a', characterIndex: 0 }))?.team).toEqual([]);
@@ -123,11 +134,13 @@ describe('저장', () => {
       team: [...Array(8).fill({ speciesId: 1, level: 5, exp: 0 }), { speciesId: -1, level: 5 }, 'x'],
       ropes: { basic: -3, sturdy: 'a' },
       coins: 'many',
+      potions: -4,
     });
     const parsed = parseSave(raw);
     expect(parsed?.team).toHaveLength(6);
     expect(parsed?.ropes).toEqual({ basic: 5, sturdy: 0 });
     expect(parsed?.coins).toBe(0);
+    expect(parsed?.potions).toBe(0);
   });
   it('tutorialDone: 없으면 false(코인이 있으면 true), 있으면 그대로', () => {
     const { tutorialDone: _omit, ...rest } = data;
