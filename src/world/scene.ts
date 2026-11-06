@@ -23,7 +23,14 @@ const RESPAWN_SECONDS = 10;
 const GRACE_SECONDS = 3; // 전투에서 돌아온 직후엔 자동 결투를 잠시 막는다
 const AGGRESSIVE_RATE = 0.4; // 이 비율의 야생 오디만 먼저 다가온다
 const FIELD_RANGE = 8; // 필드 로프/출동 가능 거리
-const BATTLE_GAP = 3.6; // 전투 때 내 오디와 야생 오디 사이 거리
+const BATTLE_GAP = 3.6;
+const TOWN = { x: -19, z: -19 }; // 마을 구역 중심 (상점, 회복소)
+const TOWN_RADIUS = 9;
+const ENTER_RANGE = 2.6;
+const BUILDINGS: { kind: BuildingKind; x: number; z: number; label: string; wall: string; roof: string }[] = [
+  { kind: 'shop', x: TOWN.x - 3.6, z: TOWN.z, label: '상점', wall: '#e8d4a8', roof: '#c0503a' },
+  { kind: 'healer', x: TOWN.x + 3.6, z: TOWN.z, label: '회복소', wall: '#f4f0f0', roof: '#4a9a6a' },
+]; // 전투 때 내 오디와 야생 오디 사이 거리
 
 export interface WildInfo {
   key: number;
@@ -33,8 +40,12 @@ export interface WildInfo {
   status: Status | null;
 }
 
+export type BuildingKind = 'shop' | 'healer';
+
 export interface NearbyState {
   duel: boolean;
+  /** 가까이 있는 건물 (들어가기 버튼) */
+  building: BuildingKind | null;
   field: { name: string; level: number; hpPct: number } | null;
 }
 
@@ -125,6 +136,8 @@ export class WorldScene {
 
   private mode: 'explore' | 'battle' = 'explore';
   private busy = false; // 필드 로프 던지는 중
+  private locked = false; // 상점·회복소 화면이 열려 있는 동안 멈춤
+  private building: BuildingKind | null = null;
   private engaged: Wild | null = null;
   private duelTarget: Wild | null = null;
   private fieldTarget: Wild | null = null;
@@ -165,6 +178,7 @@ export class WorldScene {
     this.scene.add(sun);
 
     this.buildMeadow();
+    this.buildTown();
     this.arrowGeo = this.track(new THREE.ConeGeometry(0.12, 0.3, 4));
     this.arrowUp = this.lambert('#3bb273');
     this.arrowDown = this.lambert('#e0523f');
@@ -223,6 +237,19 @@ export class WorldScene {
   // ---------- 외부에서 부르는 것 ----------
 
   setInput(vec: Vec2) { this.input = vec; }
+
+  /** 상점·회복소 화면이 열려 있으면 멈춘다 */
+  setLocked(locked: boolean) {
+    this.locked = locked;
+    if (locked) this.input = { x: 0, z: 0 };
+    this.publishNearby(true);
+  }
+
+  /** 회복소 연출: 플레이어 주위로 초록 화살표가 솟는다 */
+  healEffect() {
+    this.arrowsAt(this.playerPos.x - 0.5, this.playerPos.z, true);
+    this.arrowsAt(this.playerPos.x + 0.5, this.playerPos.z, true);
+  }
 
   /** 가까운 야생 오디와 결투 */
   tryDuel() {
@@ -386,6 +413,7 @@ export class WorldScene {
       const x = (Math.random() * 2 - 1) * (AREA_HALF + 6);
       const z = (Math.random() * 2 - 1) * (AREA_HALF + 6);
       if (Math.hypot(x, z) < 6) continue; // 출발점 주변은 비운다
+      if (Math.hypot(x - TOWN.x, z - TOWN.z) < TOWN_RADIUS + 2) continue; // 마을도 비운다
       if (i % 4 === 3) {
         const rock = new THREE.Mesh(rockGeo, rockMat);
         rock.position.set(x, 0.3, z);
@@ -404,6 +432,56 @@ export class WorldScene {
         this.scene.add(tree);
       }
     }
+  }
+
+  /** 마을: 흙바닥 위에 상점과 회복소. 간판 글자는 캔버스 텍스처 */
+  private buildTown() {
+    const ground = new THREE.Mesh(this.track(new THREE.CircleGeometry(TOWN_RADIUS, 20)), this.lambert('#dccb9b'));
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set(TOWN.x, 0.02, TOWN.z);
+    this.scene.add(ground);
+
+    const wallGeo = this.track(new THREE.BoxGeometry(4, 2.6, 3));
+    const roofGeo = this.track(new THREE.ConeGeometry(3.3, 1.6, 4));
+    const doorGeo = this.track(new THREE.BoxGeometry(1, 1.7, 0.1));
+    const doorMat = this.lambert('#5a3a22');
+    for (const b of BUILDINGS) {
+      const group = new THREE.Group();
+      const wall = new THREE.Mesh(wallGeo, this.lambert(b.wall));
+      wall.position.y = 1.3;
+      const roof = new THREE.Mesh(roofGeo, this.lambert(b.roof));
+      roof.position.y = 3.4;
+      roof.rotation.y = Math.PI / 4;
+      const door = new THREE.Mesh(doorGeo, doorMat);
+      door.position.set(0, 0.85, 1.52);
+      group.add(wall, roof, door, this.makeSign(b.label));
+      group.position.set(b.x, 0, b.z);
+      this.scene.add(group);
+    }
+  }
+
+  private makeSign(text: string): THREE.Sprite {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 96;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#fff8e0';
+      ctx.fillRect(0, 0, 256, 96);
+      ctx.strokeStyle = '#23262b';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(4, 4, 248, 88);
+      ctx.fillStyle = '#23262b';
+      ctx.font = 'bold 52px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 128, 50);
+    }
+    const texture = this.track(new THREE.CanvasTexture(canvas));
+    const sprite = new THREE.Sprite(this.track(new THREE.SpriteMaterial({ map: texture })));
+    sprite.scale.set(2.4, 0.9, 1);
+    sprite.position.set(0, 3.9, 1.7);
+    return sprite;
   }
 
   // ---------- 야생 오디 ----------
@@ -433,7 +511,7 @@ export class WorldScene {
     do {
       x = (Math.random() * 2 - 1) * (AREA_HALF - 2);
       z = (Math.random() * 2 - 1) * (AREA_HALF - 2);
-    } while (distance({ x, z }, this.playerPos) < 9);
+    } while (distance({ x, z }, this.playerPos) < 9 || distance({ x, z }, TOWN) < TOWN_RADIUS + 2);
     wild.state = { x, z, heading: Math.random() * 6.28, mode: 'idle', timer: Math.random() * 2 };
     this.dress(wild);
   }
@@ -500,7 +578,7 @@ export class WorldScene {
     this.duelTarget = null;
     this.fieldTarget = null;
     this.lastNearby = '';
-    this.hooks.nearby({ duel: false, field: null });
+    this.hooks.nearby({ duel: false, building: null, field: null });
     this.hooks.duel(this.infoOf(wild));
   }
 
@@ -550,8 +628,10 @@ export class WorldScene {
   private arrows(side: 0 | 1, up: boolean) {
     const engaged = this.engaged;
     if (!engaged) return;
-    const x = side === 0 ? this.allyPos.x : engaged.state.x;
-    const z = side === 0 ? this.allyPos.z : engaged.state.z;
+    this.arrowsAt(side === 0 ? this.allyPos.x : engaged.state.x, side === 0 ? this.allyPos.z : engaged.state.z, up);
+  }
+
+  private arrowsAt(x: number, z: number, up: boolean) {
     const meshes: THREE.Mesh[] = [];
     for (let i = 0; i < 3; i += 1) {
       const mesh = new THREE.Mesh(this.arrowGeo, up ? this.arrowUp : this.arrowDown);
@@ -670,9 +750,10 @@ export class WorldScene {
 
   private publishNearby(force = false) {
     const wild = this.fieldTarget;
-    const visible = this.mode === 'explore' && !this.busy;
+    const visible = this.mode === 'explore' && !this.busy && !this.locked;
     const state: NearbyState = {
       duel: visible && this.duelTarget !== null,
+      building: visible ? this.building : null,
       field: visible && wild
         ? { name: speciesById(wild.speciesId).name, level: wild.level, hpPct: Math.round(wild.hpRatio * 100) }
         : null,
@@ -685,7 +766,7 @@ export class WorldScene {
   }
 
   private updatePlayer(dt: number) {
-    if (this.mode !== 'explore' || this.busy) return;
+    if (this.mode !== 'explore' || this.busy || this.locked) return;
     const keyMove = keysToMove(this.keys);
     const raw = keyMove.x !== 0 || keyMove.z !== 0 ? keyMove : this.input;
     const move = inputToWorld(raw, 0);
@@ -705,7 +786,7 @@ export class WorldScene {
   }
 
   private updateWilds(dt: number) {
-    const exploring = this.mode === 'explore' && !this.busy;
+    const exploring = this.mode === 'explore' && !this.busy && !this.locked;
     let duel: Wild | null = null;
     let duelDist = DUEL_RANGE;
     let field: Wild | null = null;
@@ -741,6 +822,12 @@ export class WorldScene {
       if (!exploring || isEngaged) continue;
       if (dist <= duelDist) { duel = wild; duelDist = dist; }
       if (dist <= fieldDist && this.inView(wild)) { field = wild; fieldDist = dist; }
+    }
+    this.building = null;
+    if (exploring) {
+      for (const b of BUILDINGS) {
+        if (distance(this.playerPos, { x: b.x, z: b.z + 3 }) <= ENTER_RANGE) this.building = b.kind;
+      }
     }
     this.duelTarget = exploring ? duel : null;
     this.fieldTarget = exploring ? field : null;

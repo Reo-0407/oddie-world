@@ -9,6 +9,7 @@ import { joystickToMove } from '../world/math.ts';
 import { START_LEVEL, type Ropes, type SaveData } from '../world/save.ts';
 import { WorldScene, type NearbyState, type SceneHooks, type WildInfo } from '../world/scene.ts';
 import { BattleOverlay } from './BattleOverlay.tsx';
+import { HealerOverlay, ShopOverlay } from './TownOverlays.tsx';
 
 const JOY_RADIUS = 50;
 const TOAST_MS = 5000;
@@ -41,7 +42,8 @@ export function WorldView({ data, onData }: Props) {
   const sceneRef = useRef<WorldScene | null>(null);
   const [scene, setScene] = useState<WorldScene | null>(null);
   const [battle, setBattle] = useState<ActiveBattle | null>(null);
-  const [nearby, setNearby] = useState<NearbyState>({ duel: false, field: null });
+  const [nearby, setNearby] = useState<NearbyState>({ duel: false, building: null, field: null });
+  const [panel, setPanel] = useState<'shop' | 'healer' | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,13 +117,17 @@ export function WorldView({ data, onData }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.characterIndex]);
 
-  const finishBattle = (report: BattleReport, ropes: Ropes) => {
+  // 상점·회복소 화면이 열려 있는 동안 월드는 멈춘다
+  useEffect(() => { scene?.setLocked(panel !== null); }, [panel, scene]);
+
+  const finishBattle = (report: BattleReport, bag: { ropes: Ropes; potions: number }) => {
     const current = dataRef.current;
     const next: SaveData = {
       ...current,
       team: report.team,
       box: report.box,
-      ropes,
+      ropes: bag.ropes,
+      potions: bag.potions,
       coins: current.coins + report.coins,
       playerLevel: highestLevel(report.team, START_LEVEL),
       tutorialDone: current.tutorialDone || (battle?.tutorial ?? false),
@@ -160,7 +166,7 @@ export function WorldView({ data, onData }: Props) {
     <div className="world" ref={containerRef}>
       {!battle && (
         <div className="world-hud">
-          <div>{data.name} · 코인 {data.coins} · 로프 {data.ropes.basic} · 튼튼한 로프 {data.ropes.sturdy}</div>
+          <div>{data.name} · 코인 {data.coins} · 로프 {data.ropes.basic} · 튼튼한 로프 {data.ropes.sturdy} · 회복약 {data.potions}</div>
           <div>{data.team.map((oddie) => `${speciesById(oddie.speciesId).name} Lv.${oddie.level}`).join(' / ')}</div>
         </div>
       )}
@@ -188,9 +194,29 @@ export function WorldView({ data, onData }: Props) {
                 <button className="field-button" onClick={() => scene?.skirmish()}>출동!</button>
               </>
             )}
+            {nearby.building && (
+              <button className="field-button" onClick={() => setPanel(nearby.building)}>
+                {nearby.building === 'shop' ? '상점 ' : '회복소 '}들어가기
+              </button>
+            )}
             {nearby.duel && <button className="duel-button" onClick={() => scene?.tryDuel()}>결투!</button>}
           </div>
         </>
+      )}
+
+      {panel === 'shop' && (
+        <ShopOverlay
+          inventory={{ coins: data.coins, ropes: data.ropes, potions: data.potions }}
+          onChange={(next) => onData({ ...data, coins: next.coins, ropes: next.ropes, potions: next.potions })}
+          onClose={() => setPanel(null)}
+        />
+      )}
+      {panel === 'healer' && (
+        <HealerOverlay
+          team={data.team}
+          onHeal={() => { sceneRef.current?.healEffect(); }}
+          onClose={() => setPanel(null)}
+        />
       )}
 
       {battle && (
@@ -199,6 +225,7 @@ export function WorldView({ data, onData }: Props) {
           team={data.team}
           box={data.box}
           ropes={data.ropes}
+          potions={data.potions}
           tutorial={battle.tutorial}
           scene={scene}
           onFinish={finishBattle}

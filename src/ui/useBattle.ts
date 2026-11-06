@@ -134,5 +134,19 @@ export function useBattle(initial: BattleState, hooks: BattleHooks = {}) {
     });
   }, [finishTurn, state]);
 
-  return { state, shown, message, playing, caught, act, forceSwitch, throwRope };
+  /** 회복약: 엔진은 건드리지 않고 내 오디의 체력만 직접 올린 뒤, 내 차례는 쓴 것으로 치고(pass) 상대만 행동한다 */
+  const usePotion = useCallback((amount: number) => {
+    const healed = structuredClone(state);
+    const mine = activeOf(healed, 0);
+    mine.hp = Math.min(mine.stats.hp, mine.hp + amount);
+    setPlaying(true);
+    setMessage(`회복약! ${mine.name}의 체력이 회복됐다!`);
+    hooksRef.current.onEvent?.({ t: 'heal', side: 0, name: mine.name, amount, hp: mine.hp });
+    setShown((current) => ({ ...current, hp: [mine.hp, current.hp[1]] }));
+    timer.current = setTimeout(() => {
+      finishTurn(resolveTurn(healed, [{ kind: 'pass' }, chooseAiAction(healed, 1)]));
+    }, EVENT_DELAY_MS);
+  }, [finishTurn, state]);
+
+  return { state, shown, message, playing, caught, act, forceSwitch, throwRope, usePotion };
 }

@@ -285,3 +285,41 @@ footer {
 .menu-row button { flex: 1; min-height: 44px; }
 .pulse { animation: pulse 0.9s ease-in-out infinite; background: #fff3c4; }
 @keyframes pulse { 50% { transform: scale(1.06); } }
+
+/* ---- 상점·회복소 ---- */
+.panel-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: rgba(35, 38, 43, 0.45);
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 12px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: #fffdf4;
+}
+.panel h2 { margin: 0; text-align: center; font-size: 1.2rem; }
+.panel .coins { margin: 0; text-align: center; }
+.panel .note { margin: 0; padding: 6px 10px; border-radius: 8px; background: #fff3c4; text-align: center; }
+.shop-row { display: flex; flex-direction: column; gap: 4px; padding: 6px 0; border-top: 1px solid #0002; }
+.shop-info { display: flex; flex-direction: column; }
+.shop-info .help { opacity: 0.75; }
+.shop-buy { display: flex; align-items: center; gap: 6px; }
+.shop-buy button { min-height: 40px; }
+.shop-buy .qty { min-width: 24px; text-align: center; font-weight: 700; }
+.shop-buy button:last-child { flex: 1; }
+.shop-buy .poor { opacity: 0.55; }
+.team-list { margin: 0; padding-left: 20px; }
+.panel, .b-bottom { touch-action: pan-y; }

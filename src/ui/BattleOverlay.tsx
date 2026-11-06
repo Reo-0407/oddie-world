@@ -5,6 +5,7 @@ import type { BattlePokemon, BattleState, Move, Status } from '../engine/types.t
 import { catchChance, ROPE_NAMES, ropeSequence, type RopeKind } from '../game/capture.ts';
 import type { OwnedOddie } from '../game/owned.ts';
 import { settleBattle, type BattleReport } from '../game/rewards.ts';
+import { ITEM_NAMES, potionHeal } from '../game/shop.ts';
 import { battleOutcome, tutorialHint } from '../game/tutorial.ts';
 import type { WorldScene } from '../world/scene.ts';
 import type { Ropes } from '../world/save.ts';
@@ -37,15 +38,16 @@ interface Props {
   team: OwnedOddie[];
   box: OwnedOddie[];
   ropes: Ropes;
+  potions: number;
   /** 첫 결투: 도망 없음, 안내 문구, 첫 로프 100% 성공 */
   tutorial: boolean;
   scene: WorldScene | null;
-  onFinish: (report: BattleReport, ropesLeft: Ropes) => void;
+  onFinish: (report: BattleReport, bag: { ropes: Ropes; potions: number }) => void;
 }
 
 /** 월드 3D 장면 위에 얹는 전투 메뉴. 전투 규칙은 useBattle(엔진)이 맡는다 */
-export function BattleOverlay({ initial, team, box, ropes, tutorial, scene, onFinish }: Props) {
-  const { state, shown, message, playing, caught, act, forceSwitch, throwRope } = useBattle(initial, {
+export function BattleOverlay({ initial, team, box, ropes, potions, tutorial, scene, onFinish }: Props) {
+  const { state, shown, message, playing, caught, act, forceSwitch, throwRope, usePotion } = useBattle(initial, {
     onEvent: (event) => scene?.battleEvent(event),
     playRope: scene ? (seq) => scene.playRope(seq) : undefined,
   });
@@ -53,6 +55,7 @@ export function BattleOverlay({ initial, team, box, ropes, tutorial, scene, onFi
   const [bagOpen, setBagOpen] = useState(false);
   const [detail, setDetail] = useState<Move | null>(null);
   const [ropesLeft, setRopesLeft] = useState(ropes);
+  const [potionsLeft, setPotionsLeft] = useState(potions);
   const [movesUsed, setMovesUsed] = useState(0);
   const [thrown, setThrown] = useState(0);
   const longPressed = useRef(false);
@@ -102,11 +105,19 @@ export function BattleOverlay({ initial, team, box, ropes, tutorial, scene, onFi
     throwRope(ropeSequence(chance, Math.random, tutorial && thrown === 0));
   };
 
+  const healAmount = potionHeal(me.hp, me.stats.hp);
+  const drinkPotion = () => {
+    if (potionsLeft <= 0 || healAmount <= 0) return;
+    setBagOpen(false);
+    setPotionsLeft(potionsLeft - 1);
+    usePotion(healAmount);
+  };
+
   const flee = () => {
     onFinish(settleBattle({
       outcome: 'fled', team, box, alive: player.team.map((pokemon) => pokemon.hp > 0),
       wildSpeciesId: wild.speciesId, wildLevel: wild.level,
-    }), ropesLeft);
+    }), { ropes: ropesLeft, potions: potionsLeft });
   };
 
   const canFlee = !tutorial && me.trapped === 0;
@@ -144,7 +155,7 @@ export function BattleOverlay({ initial, team, box, ropes, tutorial, scene, onFi
                 {up.newMoves.length > 0 && ` · 새 기술: ${up.newMoves.join(', ')}`}
               </p>
             ))}
-            <button className="wide" onClick={() => onFinish(report, ropesLeft)}>계속하기</button>
+            <button className="wide" onClick={() => onFinish(report, { ropes: ropesLeft, potions: potionsLeft })}>계속하기</button>
           </div>
         )}
 
@@ -195,6 +206,9 @@ export function BattleOverlay({ initial, team, box, ropes, tutorial, scene, onFi
                 로프 던지기: {ROPE_NAMES[kind]} ({ropesLeft[kind]}개)
               </button>
             ))}
+            <button disabled={potionsLeft <= 0 || healAmount <= 0} onClick={drinkPotion}>
+              {ITEM_NAMES.potion} 쓰기 ({potionsLeft}개){healAmount > 0 ? ` · +${healAmount}` : ' · 체력이 가득해'}
+            </button>
             <button onClick={() => setBagOpen(false)}>취소</button>
           </div>
         )}
