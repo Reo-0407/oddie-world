@@ -150,8 +150,8 @@ export function shakeMove(): Move {
 // ---------- 고유 기술 ----------
 
 const POWER_MULTIPLIER: Record<string, number> = {
-  pri: 0.7, crit: 0.9, rec: 1.25, hit2: 0.6, hit3: 0.4, flin: 0.9, ovr: 1.3, rev: 0.8, pun: 0.9,
-  dly: 1.3, cha: 1.8, piv: 0.8, trp: 0.8,
+  pri: 0.7, crit: 0.9, rec: 1.25, hit2: 0.6, hit3: 0.33, flin: 0.9, ovr: 1.3, rev: 0.8, pun: 0.9,
+  dly: 1.4, cha: 2.0, piv: 0.8, trp: 0.8,
 };
 for (const stat of STATS) {
   POWER_MULTIPLIER[`up_${stat}`] = 0.85;
@@ -172,7 +172,7 @@ function attackEffects(trait: string, special: boolean): MoveEffect[] {
   if (trait === 'low') return [{ kind: 'lowHp' }];
   if (trait === 'rev') return [{ kind: 'revenge' }];
   if (trait === 'pun') return [{ kind: 'punish' }];
-  if (trait === 'pct') return [{ kind: 'percent', ratio: 0.35 }];
+  if (trait === 'pct') return [{ kind: 'percent', ratio: 0.4 }];
   if (trait === 'dly') return [{ kind: 'delayed' }];
   if (trait === 'cha') return [{ kind: 'charge' }];
   if (trait === 'piv') return [{ kind: 'pivot' }];
@@ -198,7 +198,10 @@ function statusEffects(trait: string): MoveEffect[] {
   const stage = /^(up2|dn2)_(atk|def|spa|spd|spe)$/.exec(trait);
   if (stage) {
     const up = stage[1] === 'up2';
-    return [{ kind: 'stage', target: up ? 'self' : 'foe', stat: stage[2] as StatKey, delta: up ? 2 : -2, chance: 100 }];
+    const main: MoveEffect = { kind: 'stage', target: up ? 'self' : 'foe', stat: stage[2] as StatKey, delta: up ? 2 : -2, chance: 100 };
+    // 방어를 2단계 올리는 기술은 특방도 1단계 같이 올려 준다
+    if (trait === 'up2_def') return [main, { kind: 'stage', target: 'self', stat: 'spd', delta: 1, chance: 100 }];
+    return [main];
   }
   return [];
 }

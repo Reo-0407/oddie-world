@@ -134,10 +134,13 @@ export function effectOf<K extends MoveEffect['kind']>(move: Move, kind: K): Ext
 }
 
 /** 이번에 실제로 쓰는 위력. 도박은 난수를 하나 쓴다 */
+/** 역전: 체력이 바닥일 때 위력이 최대 이 비율만큼 오른다 (1.6배) */
+const LOW_HP_BONUS = 0.6;
+
 export function movePower(move: Move, attacker: BattlePokemon, defender: BattlePokemon, rng: Rng): number {
   let power = move.power;
   for (const effect of move.effects) {
-    if (effect.kind === 'lowHp') power *= 1 + (1 - attacker.hp / attacker.stats.hp);
+    if (effect.kind === 'lowHp') power *= 1 + LOW_HP_BONUS * (1 - attacker.hp / attacker.stats.hp);
     if (effect.kind === 'revenge' && attacker.hitThisTurn) power *= 2;
     if (effect.kind === 'punish' && defender.status !== null) power *= 1.6;
     if (effect.kind === 'gamble') power *= effect.min + rng.next() * (effect.max - effect.min);

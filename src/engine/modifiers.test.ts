@@ -12,7 +12,7 @@ const base = (effects: MoveEffect[]) => tackle({ power: 80, effects });
 describe('위력 보정', () => {
   test('역전: 체력이 낮을수록 세다', () => {
     const attacker = mon({ hp: 25 });
-    expect(movePower(base([{ kind: 'lowHp' }]), attacker, mon(), rngWith(0))).toBe(140);
+    expect(movePower(base([{ kind: 'lowHp' }]), attacker, mon(), rngWith(0))).toBe(116); // 1 + 0.6 × 0.75 = 1.45배
     expect(movePower(base([{ kind: 'lowHp' }]), mon(), mon(), rngWith(0))).toBe(80);
   });
 

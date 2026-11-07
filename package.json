@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "test": "vitest run",
-    "data": "tsx scripts/build-oddies.ts"
+    "data": "tsx scripts/build-oddies.ts",
+    "sim": "tsx scripts/sim.ts"
   },
   "dependencies": {
     "@types/three": "^0.187.0",

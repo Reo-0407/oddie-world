@@ -92,10 +92,10 @@ describe('고유 기술', () => {
   test('선공, 연타, 충전, 도박', () => {
     expect(signatureMove(entry('005|Spriggy|gra|-|spd|새싹 도약|pri'), 'Rare')).toMatchObject({ priority: 1, power: 55, category: 'physical' });
     const triple = signatureMove(entry('016|Tumblee|gro|nor|spd|회전초 구르기|hit3'), 'Common');
-    expect(triple).toMatchObject({ power: 25 });
+    expect(triple).toMatchObject({ power: 20 }); // 0.33 보정
     expect(triple.effects).toEqual([{ kind: 'multiHit', hits: 3 }]);
     const charge = signatureMove(entry('010|Sunhorn|gra|fir|can|태양 뿔 광선|cha+brn'), 'Legendary');
-    expect(charge.power).toBe(190);
+    expect(charge.power).toBe(210); // 보정 2.0
     expect(charge.accuracy).toBe(90);
     expect(charge.effects).toEqual([{ kind: 'charge' }, { kind: 'status', status: 'burn', chance: 30 }]);
     const gamble = signatureMove(entry('095|404DDIE|ele|ste|bal|페이지 없음|gam'), 'Epic');
@@ -110,7 +110,10 @@ describe('고유 기술', () => {
     expect(signatureMove(entry('006|Moomoo|nor|gra|tnk|종소리 되새김|!heal'), 'Rare')).toMatchObject({ accuracy: 0, effects: [{ kind: 'heal', ratio: 0.5 }] });
     expect(signatureMove(entry('014|Cacto|gra|gro|tnk|가시 껴안기|!shield'), 'Common').effects).toEqual([{ kind: 'shield' }]);
     expect(signatureMove(entry('069|THE OVERGROWTH|gra|gro|tnk|모든 것을 덮는 성장|!up2_def'), 'Secret').effects)
-      .toEqual([{ kind: 'stage', target: 'self', stat: 'def', delta: 2, chance: 100 }]);
+      .toEqual([
+        { kind: 'stage', target: 'self', stat: 'def', delta: 2, chance: 100 },
+        { kind: 'stage', target: 'self', stat: 'spd', delta: 1, chance: 100 },
+      ]);
     expect(signatureMove(entry('027|Chillo|ice|wat|wal|서리 잔 쏟기|!dn2_atk'), 'Common').effects)
       .toEqual([{ kind: 'stage', target: 'foe', stat: 'atk', delta: -2, chance: 100 }]);
   });
@@ -124,7 +127,7 @@ describe('고유 기술', () => {
 
   test('비례 피해', () => {
     const move = signatureMove(entry('094|Nullhorn|dar|psy|can|빈 뿔 광선|pct'), 'Rare');
-    expect(move.effects).toEqual([{ kind: 'percent', ratio: 0.35 }]);
+    expect(move.effects).toEqual([{ kind: 'percent', ratio: 0.4 }]);
     expect(move.accuracy).toBe(90);
   });
 });
