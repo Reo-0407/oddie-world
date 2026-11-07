@@ -7,7 +7,8 @@ import { gainExp } from '../game/growth.ts';
 import { highestLevel, type OwnedOddie } from '../game/owned.ts';
 import { autoSkirmish } from '../game/skirmish.ts';
 import { TUTORIAL_HP_RATIO, tutorialWildLevel, withHpRatio } from '../game/tutorial.ts';
-import { buildCharacter, CHARACTERS, disposeObject, loadCharacterModel } from './characters.ts';
+import { buildCharacter, CHARACTERS, disposeObject, loadCharacterModel, rigOf } from './characters.ts';
+import type { CharacterRig } from './rig.ts';
 import {
   clampToArea, distance, DUEL_RANGE, inputToWorld, keysToMove, NOTICE_RANGE, type Vec2,
 } from './math.ts';
@@ -127,6 +128,9 @@ export class WorldScene {
   private player = new THREE.Group();
   private playerPos: Vec2 = { x: 0, z: 0 };
   private playerHeading = Math.PI;
+  private playerRig: CharacterRig | undefined;
+  private walkPhase = 0;
+  private walkBlend = 0;
 
   private allyHolder = new THREE.Group();
   private allyPivot = new THREE.Group();
@@ -197,6 +201,7 @@ export class WorldScene {
         fallback = null;
       }
       this.player.add(model);
+      this.playerRig = rigOf(model);
     });
 
     // 내 오디(전투 때만 보인다)
@@ -781,6 +786,9 @@ export class WorldScene {
     }
     this.playerRoot.position.set(this.playerPos.x, 0, this.playerPos.z);
     this.playerRoot.rotation.y = this.playerHeading;
+    this.walkBlend += ((moving ? 1 : 0) - this.walkBlend) * Math.min(1, dt * 10);
+    if (moving) this.walkPhase += dt * 11;
+    this.playerRig?.setPose(this.walkPhase, this.walkBlend);
     this.player.position.y = moving ? Math.abs(Math.sin(this.clock * 12)) * 0.08 : 0;
     this.player.rotation.z = moving ? Math.sin(this.clock * 12) * 0.1 : 0;
   }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { matte } from './materials.ts';
+import { buildRig, type CharacterRig } from './rig.ts';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 export interface CharacterLook {
@@ -38,6 +39,8 @@ export async function loadCharacterModel(look: CharacterLook, height = PLAYER_HE
     const fitted = new THREE.Box3().setFromObject(wrapper);
     const center = fitted.getCenter(new THREE.Vector3());
     gltf.scene.position.set(-center.x, -fitted.min.y, -center.z);
+    // 팔을 내린 기본 자세로 만들고, 걸을 때 쓸 장치를 붙인다 (뼈를 못 찾으면 T자 그대로)
+    wrapper.userData.rig = buildRig(wrapper) ?? undefined;
     return wrapper;
   } catch {
     return null;
@@ -85,4 +88,9 @@ export function disposeObject(root: THREE.Object3D): void {
       material.dispose();
     }
   });
+}
+
+/** loadCharacterModel이 만든 모델에 붙은 자세 장치 */
+export function rigOf(model: THREE.Object3D): CharacterRig | undefined {
+  return model.userData.rig as CharacterRig | undefined;
 }

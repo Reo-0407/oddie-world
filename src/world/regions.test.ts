@@ -7,7 +7,7 @@ import {
   speciesWeight, START_POS, type RegionId,
 } from './regions.ts';
 import { classifyBone } from './rigNames.ts';
-import { stepWander } from './wander.ts';
+import { stepWander, type WanderState } from './wander.ts';
 
 describe('구역', () => {
   it('네 구역이 사분면으로 나뉜다', () => {
@@ -86,7 +86,7 @@ describe('맵 경계', () => {
     expect(insideMap({ x: MAP_HALF + 0.1, z: 0 })).toBe(false);
   });
   it('배회하는 오디는 맵 가장자리를 넘지 않는다', () => {
-    let state = { x: MAP_HALF - 0.2, z: 0, heading: Math.PI / 2, mode: 'walk' as const, timer: 100 };
+    let state: WanderState = { x: MAP_HALF - 0.2, z: 0, heading: Math.PI / 2, mode: 'walk', timer: 100 };
     const rand = () => 0.5;
     for (let i = 0; i < 200; i += 1) {
       state = stepWander(state, 0.1, rand, MAP_HALF);
