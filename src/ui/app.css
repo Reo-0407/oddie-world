@@ -333,3 +333,17 @@ footer {
 .online .moves { margin-top: 8px; }
 .online .team { margin-top: 8px; }
 .world-bar { gap: 8px; }
+
+.minimap {
+  position: absolute;
+  top: 56px;
+  right: 8px;
+  width: 92px;
+  height: 92px;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  pointer-events: none;
+  z-index: 4;
+}
+.toast { right: 108px; }

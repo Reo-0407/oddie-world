@@ -6,6 +6,7 @@ import { addCaught, highestLevel } from '../game/owned.ts';
 import { grantExp, type BattleReport } from '../game/rewards.ts';
 import { withHpRatio } from '../game/tutorial.ts';
 import { joystickToMove } from '../world/math.ts';
+import { MAP_HALF, REGIONS, TOWN_POS } from '../world/regions.ts';
 import { START_LEVEL, type Ropes, type SaveData } from '../world/save.ts';
 import { WorldScene, type NearbyState, type SceneHooks, type WildInfo } from '../world/scene.ts';
 import { BattleOverlay } from './BattleOverlay.tsx';
@@ -13,6 +14,44 @@ import { HealerOverlay, ShopOverlay } from './TownOverlays.tsx';
 
 const JOY_RADIUS = 50;
 const TOAST_MS = 5000;
+const MINIMAP_SIZE = 92;
+
+/** 작은 지도: 네 구역 색, 마을(노랑), 플레이어(빨강) */
+function Minimap({ scene }: { scene: WorldScene | null }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const scale = MINIMAP_SIZE / (MAP_HALF * 2);
+    const toPx = (v: number) => (v + MAP_HALF) * scale;
+    const draw = () => {
+      const half = MINIMAP_SIZE / 2;
+      ctx.fillStyle = REGIONS.meadow.ground; ctx.fillRect(0, 0, half, half);
+      ctx.fillStyle = REGIONS.desert.ground; ctx.fillRect(half, 0, half, half);
+      ctx.fillStyle = REGIONS.snow.ground; ctx.fillRect(0, half, half, half);
+      ctx.fillStyle = REGIONS.volcano.ground; ctx.fillRect(half, half, half, half);
+      ctx.fillStyle = '#f4c542';
+      ctx.strokeStyle = '#23262b';
+      ctx.lineWidth = 1;
+      ctx.fillRect(toPx(TOWN_POS.x) - 3, toPx(TOWN_POS.z) - 3, 6, 6);
+      ctx.strokeRect(toPx(TOWN_POS.x) - 3, toPx(TOWN_POS.z) - 3, 6, 6);
+      const player = scene?.getPlayerPos();
+      if (player) {
+        ctx.fillStyle = '#e0302a';
+        ctx.beginPath();
+        ctx.arc(toPx(player.x), toPx(player.z), 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+      }
+    };
+    draw();
+    const timer = setInterval(draw, 250);
+    return () => clearInterval(timer);
+  }, [scene]);
+  return <canvas ref={canvasRef} className="minimap" width={MINIMAP_SIZE} height={MINIMAP_SIZE} aria-label="지도" />;
+}
 
 interface Props {
   data: SaveData;
@@ -91,6 +130,7 @@ export function WorldView({ data, onData }: Props) {
         setToast((previous) => `${previous ?? ''}${extra}`);
       },
       toast: setToast,
+      region: (name) => setToast(name),
     };
     let created: WorldScene;
     try {
@@ -170,6 +210,7 @@ export function WorldView({ data, onData }: Props) {
           <div>{data.team.map((oddie) => `${speciesById(oddie.speciesId).name} Lv.${oddie.level}`).join(' / ')}</div>
         </div>
       )}
+      {!battle && <Minimap scene={scene} />}
       {toast && <div className="toast" role="status">{toast}</div>}
 
       {!battle && (

@@ -1,3 +1,4 @@
+import { pixelRatioCap, pixelRatioFor } from './device.ts';
 import { describe, expect, it } from 'vitest';
 import { SPECIES } from '../data/index.ts';
 import { createRng } from '../engine/rng.ts';
@@ -120,5 +121,15 @@ describe('캐릭터 뼈 이름', () => {
     for (const name of ['Hips', 'Head', 'Neck', 'Torso', 'CharacterArmature', 'Abdomen', 'Chest', 'Eyeball']) {
       expect(classifyBone(name), name).toBeNull();
     }
+  });
+});
+
+describe('화면 배율 상한', () => {
+  it('폰(터치 또는 좁은 화면)은 1.5, 데스크톱은 2', () => {
+    expect(pixelRatioFor(3, 5, 375)).toBe(1.5);
+    expect(pixelRatioFor(3, 0, 500)).toBe(1.5);
+    expect(pixelRatioFor(3, 0, 1280)).toBe(2);
+    expect(pixelRatioFor(1, 5, 375)).toBe(1);
+    expect(pixelRatioCap(0, 1920)).toBe(2);
   });
 });

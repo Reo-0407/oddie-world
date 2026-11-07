@@ -12,20 +12,29 @@ import type { CharacterRig } from './rig.ts';
 import {
   clampToArea, distance, DUEL_RANGE, inputToWorld, keysToMove, NOTICE_RANGE, type Vec2,
 } from './math.ts';
+import { pixelRatioFor } from './device.ts';
 import { MODEL_HEIGHT, OddieModels } from './oddieModels.ts';
+import {
+  blendHex, clampToMap, MAP_HALF, pickSpeciesForRegion, REGIONS, regionAt, regionWeights, START_POS, TOWN_POS,
+  type RegionId, type SpawnCandidate,
+} from './regions.ts';
 import type { Ropes } from './save.ts';
 import { MODEL_SPECIES_IDS, wildLevel } from './spawns.ts';
 import { stepChase, stepWander, type WanderState } from './wander.ts';
 
-const AREA_HALF = 28; // 초원 한 변의 절반
-const WILD_COUNT = 8;
+const AREA_HALF = MAP_HALF; // 맵 한 변(120)의 절반
+const WILD_COUNT = 15; // 동시에 있는 야생 오디 최대 수
+const SPAWN_MIN = 14; // 플레이어 주변 이 거리 안쪽에는 새로 나타나지 않는다
+const SPAWN_MAX = 40;
+const DESPAWN_DIST = 56; // 이보다 멀어지면 사라지고 플레이어 주변에 다시 나타난다
+const FAR_SKIP = 38; // 이보다 먼 오디는 움직임 계산을 건너뛴다(안개 속이라 안 보인다)
 const PLAYER_SPEED = 4;
 const RESPAWN_SECONDS = 10;
 const GRACE_SECONDS = 3; // 전투에서 돌아온 직후엔 자동 결투를 잠시 막는다
 const AGGRESSIVE_RATE = 0.4; // 이 비율의 야생 오디만 먼저 다가온다
 const FIELD_RANGE = 8; // 필드 로프/출동 가능 거리
 const BATTLE_GAP = 3.6;
-const TOWN = { x: -19, z: -19 }; // 마을 구역 중심 (상점, 회복소)
+const TOWN = TOWN_POS; // 마을 구역 중심 (상점, 회복소)
 const TOWN_RADIUS = 9;
 const ENTER_RANGE = 2.6;
 const BUILDINGS: { kind: BuildingKind; x: number; z: number; label: string; wall: string; roof: string }[] = [
@@ -66,6 +75,8 @@ export interface SceneHooks {
   /** 출동으로 야생 오디를 쓰러뜨려 선두 오디가 경험치를 받는다 */
   gainExp(exp: number, wild: WildInfo): void;
   toast(text: string): void;
+  /** 다른 구역에 들어갔다 */
+  region(name: string): void;
 }
 
 /** 연출용 보정값: 위치 어긋남, 크기, 흔들림, 깜빡임 */
@@ -102,6 +113,8 @@ interface Tween {
   resolve: () => void;
 }
 
+const SPAWN_CANDIDATES: SpawnCandidate[] = MODEL_SPECIES_IDS.map((id) => ({ id, types: speciesById(id).types }));
+
 function pickRandom<T>(items: readonly T[]): T {
   return items[Math.floor(Math.random() * items.length)];
 }
@@ -126,7 +139,9 @@ export class WorldScene {
 
   private playerRoot = new THREE.Group();
   private player = new THREE.Group();
-  private playerPos: Vec2 = { x: 0, z: 0 };
+  private playerPos: Vec2 = { ...START_POS };
+  private skyColor = new THREE.Color('#bfe3f5');
+  private region: RegionId | null = null;
   private playerHeading = Math.PI;
   private playerRig: CharacterRig | undefined;
   private walkPhase = 0;
@@ -168,20 +183,20 @@ export class WorldScene {
     private hooks: SceneHooks,
   ) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(pixelRatioFor(window.devicePixelRatio, navigator.maxTouchPoints, window.innerWidth));
     this.renderer.shadowMap.enabled = false;
     this.renderer.domElement.style.display = 'block';
     container.prepend(this.renderer.domElement);
 
-    const sky = new THREE.Color('#bfe3f5');
-    this.scene.background = sky;
-    this.scene.fog = new THREE.Fog(sky, 14, 46);
+    this.scene.background = this.skyColor;
+    this.scene.fog = new THREE.Fog(this.skyColor, 14, 46);
+    this.updateSky(1);
     this.scene.add(new THREE.HemisphereLight('#ffffff', '#6a8f4a', 1.6));
     const sun = new THREE.DirectionalLight('#fff3d6', 1.4);
     sun.position.set(8, 14, 6);
     this.scene.add(sun);
 
-    this.buildMeadow();
+    this.buildWorld();
     this.buildTown();
     this.arrowGeo = this.track(new THREE.ConeGeometry(0.12, 0.3, 4));
     this.arrowUp = this.lambert('#3bb273');
@@ -235,13 +250,17 @@ export class WorldScene {
     this.observer = new ResizeObserver(this.resize);
     this.observer.observe(container);
     this.resize();
-    this.camera.position.set(0, 5.5, 7);
+    this.camera.position.set(this.playerPos.x, 5.5, this.playerPos.z + 7);
+    this.look.set(this.playerPos.x, 1, this.playerPos.z);
     this.frame = requestAnimationFrame(this.tick);
   }
 
   // ---------- 외부에서 부르는 것 ----------
 
   setInput(vec: Vec2) { this.input = vec; }
+
+  /** 미니맵용 */
+  getPlayerPos(): Vec2 { return { ...this.playerPos }; }
 
   /** 상점·회복소 화면이 열려 있으면 멈춘다 */
   setLocked(locked: boolean) {
@@ -400,43 +419,130 @@ export class WorldScene {
     return this.track(new THREE.MeshLambertMaterial({ color, flatShading: true }));
   }
 
-  private buildMeadow() {
-    const ground = new THREE.Mesh(
-      this.track(new THREE.PlaneGeometry(AREA_HALF * 2 + 20, AREA_HALF * 2 + 20)),
-      this.lambert('#7bbf5a'),
-    );
+  /** 한 종류의 장식을 InstancedMesh 부품들로 한꺼번에 세운다 (부품마다 오프셋이 있다) */
+  private scatter(
+    parts: { geo: THREE.BufferGeometry; mat: THREE.Material; x?: number; y: number; z?: number }[],
+    placements: { x: number; z: number; s: number; ry: number }[],
+  ) {
+    if (placements.length === 0) return;
+    const dummy = new THREE.Object3D();
+    for (const part of parts) {
+      const mesh = new THREE.InstancedMesh(part.geo, part.mat, placements.length);
+      placements.forEach((p, i) => {
+        const ox = (part.x ?? 0) * p.s;
+        const oz = (part.z ?? 0) * p.s;
+        const cos = Math.cos(p.ry);
+        const sin = Math.sin(p.ry);
+        dummy.position.set(p.x + ox * cos + oz * sin, part.y * p.s, p.z - ox * sin + oz * cos);
+        dummy.rotation.set(0, p.ry, 0);
+        dummy.scale.setScalar(p.s);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+      });
+      mesh.frustumCulled = false;
+      this.track(mesh);
+      this.scene.add(mesh);
+    }
+  }
+
+  /** 구역 안의 무작위 자리들 (출발점과 마을은 비운다) */
+  private spots(region: RegionId, count: number, scale: [number, number]) {
+    const spots: { x: number; z: number; s: number; ry: number }[] = [];
+    const margin = 3;
+    for (let tries = 0; spots.length < count && tries < count * 6; tries += 1) {
+      const x = (Math.random() * 2 - 1) * (MAP_HALF - margin);
+      const z = (Math.random() * 2 - 1) * (MAP_HALF - margin);
+      if (regionAt(x, z) !== region) continue;
+      if (distance({ x, z }, START_POS) < 6) continue;
+      if (distance({ x, z }, TOWN) < TOWN_RADIUS + 2) continue;
+      spots.push({ x, z, s: scale[0] + Math.random() * (scale[1] - scale[0]), ry: Math.random() * Math.PI * 2 });
+    }
+    return spots;
+  }
+
+  /** 바닥(구역 색이 경계에서 섞인다), 구역별 장식, 맵 가장자리 산 */
+  private buildWorld() {
+    const size = MAP_HALF * 2 + 60;
+    const segments = size / 2;
+    const geometry = this.track(new THREE.PlaneGeometry(size, size, segments, segments));
+    const position = geometry.getAttribute('position');
+    const colors = new Float32Array(position.count * 3);
+    const color = new THREE.Color();
+    for (let i = 0; i < position.count; i += 1) {
+      const [r, g, b] = blendHex(regionWeights(position.getX(i), -position.getY(i)), (info) => info.ground);
+      color.setRGB(r, g, b, THREE.SRGBColorSpace);
+      colors.set([color.r, color.g, color.b], i * 3);
+    }
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const ground = new THREE.Mesh(geometry, this.track(new THREE.MeshLambertMaterial({ vertexColors: true })));
     ground.rotation.x = -Math.PI / 2;
     this.scene.add(ground);
 
-    const trunkGeo = this.track(new THREE.CylinderGeometry(0.2, 0.28, 1.2, 6));
-    const leafGeo = this.track(new THREE.ConeGeometry(1.1, 2.4, 7));
-    const trunkMat = this.lambert('#7a5232');
-    const leafMats = [this.lambert('#2f8f4e'), this.lambert('#3aa35a')];
+    const trunk = { geo: this.track(new THREE.CylinderGeometry(0.2, 0.28, 1.2, 6)), mat: this.lambert('#7a5232') };
     const rockGeo = this.track(new THREE.DodecahedronGeometry(0.8, 0));
-    const rockMat = this.lambert('#9a9a96');
-    for (let i = 0; i < 30; i += 1) {
-      const x = (Math.random() * 2 - 1) * (AREA_HALF + 6);
-      const z = (Math.random() * 2 - 1) * (AREA_HALF + 6);
-      if (Math.hypot(x, z) < 6) continue; // 출발점 주변은 비운다
-      if (Math.hypot(x - TOWN.x, z - TOWN.z) < TOWN_RADIUS + 2) continue; // 마을도 비운다
-      if (i % 4 === 3) {
-        const rock = new THREE.Mesh(rockGeo, rockMat);
-        rock.position.set(x, 0.3, z);
-        rock.scale.setScalar(0.6 + Math.random() * 0.8);
-        rock.rotation.y = Math.random() * 6;
-        this.scene.add(rock);
-      } else {
-        const tree = new THREE.Group();
-        const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-        trunk.position.y = 0.6;
-        const leaves = new THREE.Mesh(leafGeo, leafMats[i % 2]);
-        leaves.position.y = 2.2;
-        tree.add(trunk, leaves);
-        tree.position.set(x, 0, z);
-        tree.scale.setScalar(0.8 + Math.random() * 0.7);
-        this.scene.add(tree);
-      }
+    const rock = (color: string, y = 0.3) => ({ geo: rockGeo, mat: this.lambert(color), y });
+
+    // 초원: 나무와 바위
+    const leaf = this.track(new THREE.ConeGeometry(1.1, 2.4, 7));
+    const meadowTrees = this.spots('meadow', 70, [0.8, 1.5]);
+    const half = Math.ceil(meadowTrees.length / 2);
+    this.scatter([{ ...trunk, y: 0.6 }, { geo: leaf, mat: this.lambert('#2f8f4e'), y: 2.2 }], meadowTrees.slice(0, half));
+    this.scatter([{ ...trunk, y: 0.6 }, { geo: leaf, mat: this.lambert('#3aa35a'), y: 2.2 }], meadowTrees.slice(half));
+    this.scatter([rock('#9a9a96')], this.spots('meadow', 18, [0.6, 1.4]));
+
+    // 사막: 선인장과 사암
+    const cactusBody = this.track(new THREE.CylinderGeometry(0.25, 0.3, 2.2, 8));
+    const cactusArm = this.track(new THREE.CylinderGeometry(0.15, 0.15, 0.8, 8));
+    const cactusLink = this.track(new THREE.BoxGeometry(0.5, 0.28, 0.28));
+    const cactusMat = this.lambert('#4f9a4a');
+    this.scatter([
+      { geo: cactusBody, mat: cactusMat, y: 1.1 },
+      { geo: cactusArm, mat: cactusMat, x: -0.55, y: 1.45 },
+      { geo: cactusArm, mat: cactusMat, x: 0.55, y: 1.25 },
+      { geo: cactusLink, mat: cactusMat, x: -0.3, y: 1.05 },
+      { geo: cactusLink, mat: cactusMat, x: 0.3, y: 0.85 },
+    ], this.spots('desert', 45, [0.8, 1.6]));
+    this.scatter([rock('#c9a063')], this.spots('desert', 30, [0.7, 2]));
+
+    // 설원: 눈 덮인 나무, 얼음 바위, 눈 더미
+    const snowLeaf = this.track(new THREE.ConeGeometry(1.1, 2.4, 7));
+    const snowCap = this.track(new THREE.ConeGeometry(0.75, 1.1, 7));
+    this.scatter([
+      { ...trunk, y: 0.6 },
+      { geo: snowLeaf, mat: this.lambert('#2f6f58'), y: 2.2 },
+      { geo: snowCap, mat: this.lambert('#ffffff'), y: 3.0 },
+    ], this.spots('snow', 55, [0.8, 1.5]));
+    this.scatter([rock('#bfe3f0', 0.4)], this.spots('snow', 16, [0.7, 1.8]));
+    const mound = this.track(new THREE.SphereGeometry(1, 10, 6));
+    this.scatter([{ geo: mound, mat: this.lambert('#ffffff'), y: 0 }], this.spots('snow', 30, [0.6, 1.8]));
+
+    // 화산: 용암 바위, 흑요석 가시, 용암 웅덩이(은은하게 빛난다)
+    this.scatter([rock('#3a3030', 0.4)], this.spots('volcano', 40, [0.7, 2]));
+    const spike = this.track(new THREE.ConeGeometry(0.5, 2.2, 5));
+    this.scatter([{ geo: spike, mat: this.lambert('#241c1c'), y: 1.1 }], this.spots('volcano', 28, [0.8, 1.8]));
+    const pool = this.track(new THREE.CircleGeometry(1, 14));
+    const lava = this.track(new THREE.MeshBasicMaterial({ color: '#ff6a2a' }));
+    const pools = this.spots('volcano', 12, [1.6, 3]);
+    const poolMesh = new THREE.InstancedMesh(pool, lava, pools.length);
+    const dummy = new THREE.Object3D();
+    pools.forEach((p, i) => {
+      dummy.position.set(p.x, 0.04, p.z);
+      dummy.rotation.set(-Math.PI / 2, 0, 0);
+      dummy.scale.setScalar(p.s);
+      dummy.updateMatrix();
+      poolMesh.setMatrixAt(i, dummy.matrix);
+    });
+    poolMesh.frustumCulled = false;
+    this.track(poolMesh);
+    this.scene.add(poolMesh);
+
+    // 맵 둘레의 산 (넘어갈 수 없다는 표시)
+    const ring: { x: number; z: number; s: number; ry: number }[] = [];
+    for (let t = -MAP_HALF; t <= MAP_HALF; t += 9) {
+      const edge = MAP_HALF + 10;
+      for (const [x, z] of [[t, -edge], [t, edge], [-edge, t], [edge, t]]) ring.push({ x, z, s: 1.4 + Math.random() * 0.8, ry: 0 });
     }
+    this.scatter([{ geo: this.track(new THREE.ConeGeometry(6, 12, 6)), mat: this.lambert('#7d8a8f'), y: 6 }], ring);
   }
 
   /** 마을: 흙바닥 위에 상점과 회복소. 간판 글자는 캔버스 텍스처 */
@@ -501,7 +607,18 @@ export class WorldScene {
   }
 
   private rollWild(wild: Wild) {
-    wild.speciesId = pickRandom(MODEL_SPECIES_IDS);
+    // 플레이어 주변(SPAWN_MIN~SPAWN_MAX)에서만 나타난다. 마을과 맵 밖은 피한다
+    let x = this.playerPos.x;
+    let z = this.playerPos.z;
+    for (let tries = 0; tries < 12; tries += 1) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = SPAWN_MIN + Math.random() * (SPAWN_MAX - SPAWN_MIN);
+      const spot = clampToMap({ x: this.playerPos.x + Math.sin(angle) * radius, z: this.playerPos.z + Math.cos(angle) * radius });
+      x = spot.x;
+      z = spot.z;
+      if (distance(spot, TOWN) >= TOWN_RADIUS + 2 && distance(spot, this.playerPos) >= SPAWN_MIN * 0.7) break;
+    }
+    wild.speciesId = pickSpeciesForRegion(regionAt(x, z), SPAWN_CANDIDATES, Math.random);
     wild.level = wildLevel(highestLevel(this.getData().team, 10), Math.random);
     wild.hpRatio = 1;
     wild.status = null;
@@ -511,12 +628,6 @@ export class WorldScene {
     wild.frozen = false;
     wild.fx = newFx();
     wild.holder.visible = true;
-    let x = 0;
-    let z = 0;
-    do {
-      x = (Math.random() * 2 - 1) * (AREA_HALF - 2);
-      z = (Math.random() * 2 - 1) * (AREA_HALF - 2);
-    } while (distance({ x, z }, this.playerPos) < 9 || distance({ x, z }, TOWN) < TOWN_RADIUS + 2);
     wild.state = { x, z, heading: Math.random() * 6.28, mode: 'idle', timer: Math.random() * 2 };
     this.dress(wild);
   }
@@ -806,6 +917,11 @@ export class WorldScene {
       }
       const dist = distance(wild.state, this.playerPos);
       const isEngaged = wild === this.engaged;
+      if (!isEngaged && !wild.frozen && this.mode === 'explore' && dist > DESPAWN_DIST) {
+        this.rollWild(wild); // 너무 멀어진 오디는 플레이어 근처에 새로 나타난다
+        continue;
+      }
+      if (!isEngaged && !wild.frozen && dist > FAR_SKIP) continue; // 먼 오디는 움직임 계산을 건너뛴다
       if (!isEngaged && !wild.frozen) {
         if (exploring && wild.aggressive && this.grace <= 0 && dist <= NOTICE_RANGE) {
           wild.state = stepChase(wild.state, this.playerPos, dt, DUEL_RANGE * 0.6);
@@ -841,6 +957,22 @@ export class WorldScene {
     this.fieldTarget = exploring ? field : null;
     if (exploring && duel && duel.aggressive && this.grace <= 0) this.startDuel(duel);
     this.publishNearby();
+  }
+
+  /** 플레이어가 있는 곳의 구역 색으로 하늘과 안개를 천천히 바꾼다 */
+  private updateSky(k: number) {
+    const target = new THREE.Color();
+    const [r, g, b] = blendHex(regionWeights(this.playerPos.x, this.playerPos.z), (info) => info.sky);
+    target.setRGB(r, g, b, THREE.SRGBColorSpace);
+    this.skyColor.lerp(target, k);
+    if (this.scene.fog) this.scene.fog.color.copy(this.skyColor);
+  }
+
+  private updateRegion() {
+    const region = regionAt(this.playerPos.x, this.playerPos.z);
+    if (region === this.region) return;
+    this.region = region;
+    this.hooks.region(`${REGIONS[region].name} 지역`);
   }
 
   private updateCamera(dt: number) {
@@ -895,6 +1027,8 @@ export class WorldScene {
 
     this.updatePlayer(dt);
     this.updateWilds(dt);
+    this.updateSky(1 - Math.exp(-2 * dt));
+    if (this.mode === 'explore') this.updateRegion();
     if (this.mode === 'battle') {
       this.allyFx.blink = Math.max(0, this.allyFx.blink - dt);
       applyFx(this.allyHolder, this.allyPos.x, this.allyPos.z, this.allyFx, this.clock);

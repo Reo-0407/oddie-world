@@ -4,6 +4,8 @@ import type { Vec2 } from './math.ts';
 /** 월드는 한 변 120짜리 정사각 맵(-60~60). 가운데 십자선을 경계로 네 구역으로 나뉜다 */
 export const MAP_HALF = 60;
 export const START_POS: Vec2 = { x: -10, z: -10 };
+/** 마을(상점, 회복소) 중심. 초원 구역 안이다 */
+export const TOWN_POS: Vec2 = { x: -19, z: -19 };
 /** 구역 경계에서 색과 하늘이 섞이는 폭 (경계 양쪽으로 이만큼) */
 export const BLEND_WIDTH = 6;
 

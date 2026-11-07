@@ -1,3 +1,4 @@
+import { pixelRatioFor } from '../world/device.ts';
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { buildCharacter, CHARACTERS, disposeObject, loadCharacterModel } from '../world/characters.ts';
@@ -18,7 +19,7 @@ export function CharacterPreview({ index }: { index: number }) {
     } catch {
       return; // WebGL이 없으면 미리보기 없이 이름 카드만 쓴다
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(pixelRatioFor(window.devicePixelRatio, navigator.maxTouchPoints, window.innerWidth));
     renderer.domElement.style.cssText = 'display:block;width:100%;height:100%';
     container.appendChild(renderer.domElement);
 
