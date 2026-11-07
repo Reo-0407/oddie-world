@@ -323,3 +323,13 @@ footer {
 .shop-buy .poor { opacity: 0.55; }
 .team-list { margin: 0; padding-left: 20px; }
 .panel, .b-bottom { touch-action: pan-y; }
+
+/* ---- 친구 대전 ---- */
+.online .room-code { margin: 4px 0; text-align: center; font-size: 2.2rem; font-weight: 800; letter-spacing: 0.3rem; }
+.online-note { margin: 4px 0; font-size: 0.85rem; opacity: 0.8; text-align: center; }
+.online-error { margin: 4px 0; padding: 6px 10px; border: 2px solid var(--accent); border-radius: 8px; background: #fde8e4; }
+.online-plate { margin-bottom: 8px; padding: 8px; border: 2px solid var(--line); border-radius: 8px; background: var(--panel); display: flex; flex-direction: column; gap: 4px; }
+.online .team button.selected { background: #fff3c4; border-color: var(--accent); }
+.online .moves { margin-top: 8px; }
+.online .team { margin-top: 8px; }
+.world-bar { gap: 8px; }
