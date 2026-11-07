@@ -71,7 +71,7 @@ test('연속으로 방어하려 하지 않는다', () => {
 
 test('능력을 2단계 올리는 기술은 아직 안 올렸을 때만 쓴다', () => {
   const buff = tackle({ category: 'status', power: 0, accuracy: 0, effects: [{ kind: 'stage', target: 'self', stat: 'atk', delta: 2, chance: 100 }] });
-  const pound = tackle({ type: 'rock', power: 20 });
+  const pound = tackle({ type: 'rock', power: 120 });
   const fresh = mon({ moves: [pound, buff] });
   expect(chooseAiAction(battle([mon()], [fresh]), 1)).toEqual({ kind: 'move', moveIndex: 1 });
   const boosted = mon({ moves: [pound, buff] });
@@ -84,4 +84,67 @@ test('충전 중이면 충전한 기술을 고른다', () => {
   const user = mon({ moves: [tackle({ power: 10 }), charge] });
   user.charging = 1;
   expect(chooseAiAction(battle([mon()], [user]), 1)).toEqual({ kind: 'move', moveIndex: 1 });
+});
+
+const rock = (overrides = {}) => tackle({ type: 'rock', ...overrides });
+
+test('선공은 상대 체력이 낮으면 마무리로 높게 친다', () => {
+  const quick = rock({ name: '선공', power: 40, priority: 1 });
+  const big = rock({ name: '강타', power: 60 });
+  expect(chooseAiAction(battle([mon()], [mon({ moves: [quick, big] })]), 1)).toEqual({ kind: 'move', moveIndex: 1 });
+  expect(chooseAiAction(battle([mon({ hp: 20 })], [mon({ moves: [quick, big] })]), 1)).toEqual({ kind: 'move', moveIndex: 0 });
+});
+
+test('급소가 잘 나는 기술을 조금 더 쳐 준다', () => {
+  const crit = rock({ power: 50, effects: [{ kind: 'crit' }] });
+  const plain = rock({ power: 60 });
+  expect(chooseAiAction(battle([mon()], [mon({ moves: [plain, crit] })]), 1)).toEqual({ kind: 'move', moveIndex: 1 });
+});
+
+test('보복은 내가 느릴 때만 쓴다', () => {
+  const revenge = rock({ power: 50, effects: [{ kind: 'revenge' }] });
+  const plain = rock({ power: 70 });
+  const slow = mon({ moves: [plain, revenge], stats: { hp: 100, atk: 100, def: 100, spa: 100, spd: 100, spe: 50 } });
+  const fast = mon({ moves: [plain, revenge], stats: { hp: 100, atk: 100, def: 100, spa: 100, spd: 100, spe: 150 } });
+  expect(chooseAiAction(battle([mon()], [slow]), 1)).toEqual({ kind: 'move', moveIndex: 1 });
+  expect(chooseAiAction(battle([mon()], [fast]), 1)).toEqual({ kind: 'move', moveIndex: 0 });
+});
+
+test('역전은 내 체력이 낮을 때 쓴다', () => {
+  const reversal = rock({ power: 60, effects: [{ kind: 'lowHp' }] });
+  const plain = rock({ power: 80 });
+  expect(chooseAiAction(battle([mon()], [mon({ moves: [plain, reversal] })]), 1)).toEqual({ kind: 'move', moveIndex: 0 });
+  expect(chooseAiAction(battle([mon()], [mon({ hp: 20, moves: [plain, reversal] })]), 1)).toEqual({ kind: 'move', moveIndex: 1 });
+});
+
+test('회복은 체력이 낮을 때만, 방어 태세는 충전하는 상대에게 쓴다', () => {
+  const heal = tackle({ category: 'status', power: 0, accuracy: 0, effects: [{ kind: 'heal', ratio: 0.5 }] });
+  const shield = tackle({ category: 'status', power: 0, accuracy: 0, effects: [{ kind: 'shield' }] });
+  const pound = rock({ power: 80 });
+  expect(chooseAiAction(battle([mon()], [mon({ moves: [pound, heal] })]), 1)).toEqual({ kind: 'move', moveIndex: 0 });
+  expect(chooseAiAction(battle([mon()], [mon({ hp: 30, moves: [pound, heal] })]), 1)).toEqual({ kind: 'move', moveIndex: 1 });
+  const charging = mon({ charging: 0 });
+  expect(chooseAiAction(battle([charging], [mon({ moves: [pound, shield] })]), 1)).toEqual({ kind: 'move', moveIndex: 1 });
+  expect(chooseAiAction(battle([mon()], [mon({ moves: [pound, shield] })]), 1)).toEqual({ kind: 'move', moveIndex: 0 });
+});
+
+test('상대에게 타입이 무효인 변화 기술은 고르지 않는다', () => {
+  const sleep = tackle({ category: 'status', power: 0, type: 'ghost', effects: [{ kind: 'status', status: 'sleep', chance: 100 }] });
+  const pound = rock({ power: 10 });
+  expect(chooseAiAction(battle([mon({ types: ['normal'] })], [mon({ moves: [pound, sleep] })]), 1)).toEqual({ kind: 'move', moveIndex: 0 });
+});
+
+test('방어 태세는 상대의 변화 기술도 막는다', () => {
+  const shield = tackle({ category: 'status', power: 0, accuracy: 0, priority: 4, effects: [{ kind: 'shield' }] });
+  const spore = tackle({ category: 'status', power: 0, accuracy: 0, effects: [{ kind: 'status', status: 'sleep', chance: 100 }] });
+  const result = resolveTurn(battle([mon({ moves: [shield] })], [mon({ moves: [spore] })]), [{ kind: 'move', moveIndex: 0 }, { kind: 'move', moveIndex: 0 }]);
+  expect(result.events.some((e) => e.t === 'shieldBlock')).toBe(true);
+  expect(result.state.sides[0].team[0].status).toBeNull();
+});
+
+test('상성 0인 변화 기술은 상태이상을 걸지 못하고 효과 없음이 나온다', () => {
+  const spore = tackle({ category: 'status', power: 0, accuracy: 0, type: 'ghost', effects: [{ kind: 'status', status: 'sleep', chance: 100 }] });
+  const result = resolveTurn(battle([mon({ types: ['normal'] })], [mon({ moves: [spore] })]), [{ kind: 'pass' }, { kind: 'move', moveIndex: 0 }]);
+  expect(result.events.some((e) => e.t === 'noEffect')).toBe(true);
+  expect(result.state.sides[0].team[0].status).toBeNull();
 });

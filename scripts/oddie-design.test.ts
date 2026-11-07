@@ -191,3 +191,9 @@ describe('습득 목록', () => {
     expect(list.map((e) => e.level)).toEqual([...list.map((e) => e.level)].sort((a, b) => a - b));
   });
 });
+
+describe('설계표 형식 검사', () => {
+  test('열이 빠진 줄은 어느 줄인지 알려 주는 오류를 낸다', () => {
+    expect(() => parseDesign('001|Pippo|gra|-|bal')).toThrow(/열이 모자람.*001\|Pippo/);
+  });
+});

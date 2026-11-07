@@ -100,6 +100,7 @@ function canAct(pokemon: BattlePokemon, side: SideIndex, rng: Rng, events: Battl
       const amount = Math.min(confusionDamage(pokemon), pokemon.hp);
       pokemon.hp -= amount;
       pokemon.charging = null;
+      pokemon.hitThisTurn = true; // 스스로 맞은 것도 맞은 것이다(보복 위력이 켜진다)
       events.push({ t: 'confusionHit', side, name: pokemon.name, amount, hp: pokemon.hp });
       if (pokemon.hp <= 0) events.push({ t: 'faint', side, name: pokemon.name });
       return false;

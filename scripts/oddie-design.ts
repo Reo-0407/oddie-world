@@ -73,6 +73,9 @@ export function parseDesign(text: string): DesignEntry[] {
     .filter((line) => line && !line.startsWith('#'))
     .map((line) => {
       const [num, name, t1, t2, role, sig, traitText, sigType] = line.split('|');
+      if ([num, name, t1, t2, role, sig, traitText].some((column) => column === undefined || column === '')) {
+        throw new Error(`설계표 열이 모자람(번호|이름|타입1|타입2|역할|고유기술|효과 7칸 필요): ${line}`);
+      }
       const types = [t1, t2].filter((code) => code !== '-').map((code) => {
         if (!TYPE_CODES[code]) throw new Error(`알 수 없는 타입 ${code}: ${line}`);
         return TYPE_CODES[code];
