@@ -15,6 +15,7 @@ import { buildBattleTeam, validateTeam } from './validate.ts';
 export const TURN_MS = 60_000; // 행동 제한시간
 export const TEAM_MS = 120_000; // 팀 고르기 제한시간
 export const MAX_MISSES = 3; // 연속으로 시간을 넘기면 기권패
+export const PRESENCE_MS = 35_000; // 이 시간 동안 아무 신호가 없으면 끊긴 것으로 본다(클라이언트는 10초마다 신호)
 
 export interface RoomSeat {
   playerId: string;
@@ -23,6 +24,8 @@ export interface RoomSeat {
   team: TeamSpec | null;
   /** 연속으로 제한시간을 넘긴 횟수 */
   misses: number;
+  /** 마지막으로 이 사람의 요청을 받은 시각(ms). 인터넷 서버만 채운다 (없으면 생존 확인을 안 한다) */
+  lastSeen?: number;
 }
 
 export interface Room {
@@ -41,6 +44,8 @@ export interface Room {
   revealed: [boolean[], boolean[]];
   winner: Seat | null;
   endReason: EndReason | null;
+  /** 전적(랭킹)에 이미 기록했는지 */
+  recorded?: boolean;
 }
 
 export interface GameData {
@@ -99,6 +104,30 @@ export function joinRoom(room: Room, playerId: string, name: string, now: number
   next.phase = 'teams';
   next.deadline = now + TEAM_MS;
   return { ok: true, room: next };
+}
+
+/** 이 사람에게서 요청이 왔다: 마지막 본 시각을 갱신하고 연결됨으로 돌린다 */
+export function touchSeat(room: Room, playerId: string, now: number): Room {
+  const seat = seatOf(room, playerId);
+  if (seat === null) return room;
+  const next = structuredClone(room);
+  const target = next.seats[seat];
+  if (target) {
+    target.lastSeen = now;
+    target.connected = true;
+  }
+  return next;
+}
+
+/** 신호가 PRESENCE_MS 넘게 없는 사람은 끊긴 것으로 바꾼다. 바뀐 게 없으면 같은 방을 그대로 돌려준다 */
+function expirePresence(room: Room, now: number): Room {
+  const stale = room.seats.some((seat) => seat && seat.lastSeen !== undefined && seat.connected && now - seat.lastSeen > PRESENCE_MS);
+  if (!stale) return room;
+  const next = structuredClone(room);
+  for (const seat of next.seats) {
+    if (seat && seat.lastSeen !== undefined && seat.connected && now - seat.lastSeen > PRESENCE_MS) seat.connected = false;
+  }
+  return next;
 }
 
 export function setConnected(room: Room, playerId: string, connected: boolean): Result {
@@ -240,7 +269,8 @@ export function leaveRoom(room: Room, playerId: string): Result {
  *  - 전투: 끊긴 쪽은 진다. 연결돼 있으면 자동으로 쉬고(pass, 쓰러진 뒤라면 첫 살아있는 오디 교체),
  *    연속 3번 넘기면 진다
  */
-export function tick(room: Room, now: number): Room {
+export function tick(original: Room, now: number): Room {
+  const room = expirePresence(original, now);
   if (room.deadline === null || now < room.deadline) return room;
   const next = structuredClone(room);
   if (next.phase === 'teams') {
@@ -292,8 +322,25 @@ const ownMon = (pokemon: BattlePokemon): OwnMon => ({
 });
 
 /**
+ * 상대 쪽 사건의 체력과 피해량 숫자를 최대 체력에 대한 퍼센트로 바꾼다 (내 쪽 사건은 그대로).
+ * 상대의 실제 체력 숫자(= 능력치 힌트)가 새지 않게 한다.
+ */
+function hideFoeNumbers(events: BattleEvent[], foe: Seat, battle: BattleState | null): BattleEvent[] {
+  if (!battle) return events;
+  const team = battle.sides[foe].team;
+  return events.map((event) => {
+    if (!('side' in event) || event.side !== foe || !('hp' in event)) return event;
+    const named = 'name' in event ? team.find((pokemon) => pokemon.name === event.name) : undefined;
+    const max = (named ?? team[battle.sides[foe].active]).stats.hp;
+    const pct = (value: number) => Math.round((value / max) * 100);
+    const hidden = { ...event, hp: pct(event.hp) } as BattleEvent & { amount?: number };
+    if ('amount' in event) hidden.amount = pct(event.amount as number);
+    return hidden;
+  });
+}
+
+/**
  * seat에게 보여 줄 상태. 상대의 제출한 행동, 상대 기술/능력치, 아직 안 나온 상대 오디, 난수 상태는 뺀다.
- * (알려진 한계: lastEvents에는 지난 턴 사건이 그대로 들어 있어 상대 체력 숫자가 보인다)
  */
 export function viewFor(room: Room, seat: Seat): RoomView {
   const other: Seat = seat === 0 ? 1 : 0;
@@ -322,7 +369,7 @@ export function viewFor(room: Room, seat: Seat): RoomView {
       active: battle ? battle.sides[other].active : 0,
       submitted: room.pending[other] !== null,
     },
-    lastEvents: room.lastEvents,
+    lastEvents: hideFoeNumbers(room.lastEvents, other, battle),
     winner: room.winner,
     endReason: room.endReason,
   };

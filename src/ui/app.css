@@ -347,3 +347,6 @@ footer {
   z-index: 4;
 }
 .toast { right: 108px; }
+.online .menu-row button.selected { background: #fff3c4; border-color: var(--accent); }
+.ranking { margin: 8px 0; padding: 8px; border: 2px solid var(--line); border-radius: 8px; background: var(--panel); }
+.ranking ol { margin: 0; padding-left: 22px; }

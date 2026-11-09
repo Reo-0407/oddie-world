@@ -9,9 +9,14 @@
     "preview": "vite preview --host",
     "test": "vitest run",
     "data": "tsx scripts/build-oddies.ts",
-    "sim": "tsx scripts/sim.ts"
+    "sim": "tsx scripts/sim.ts",
+    "db:migrate": "tsx scripts/apply-migrations.ts",
+    "functions:sync": "tsx scripts/sync-functions.ts",
+    "functions:deploy": "tsx scripts/deploy-functions.ts",
+    "smoke:online": "tsx scripts/smoke-online.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
     "@types/three": "^0.187.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

@@ -21,7 +21,7 @@ export type ClientMessage =
   | { t: 'team'; playerId: string; code: string; team: TeamSpec }
   /** turn: 클라이언트가 본 현재 턴 번호. 어긋나면 오래된 행동으로 보고 무시한다 */
   | { t: 'action'; playerId: string; code: string; turn: number; action: Action }
-  /** 재접속: 현재 상태를 다시 받는다 */
+  /** 재접속과 생존 신호(10초마다): 현재 상태를 다시 받고, 서버는 만료된 제한시간을 이때 처리한다 */
   | { t: 'hello'; playerId: string; code: string }
   | { t: 'leave'; playerId: string; code: string };
 
@@ -29,7 +29,7 @@ export type ClientMessage =
 
 export type ErrorReason =
   | 'no-room' | 'full' | 'started' | 'bad-phase' | 'not-seated' | 'invalid-team'
-  | 'not-your-turn' | 'already-submitted' | 'illegal-action' | 'stale-turn' | 'bad-message';
+  | 'not-your-turn' | 'already-submitted' | 'illegal-action' | 'stale-turn' | 'bad-message' | 'rate-limited';
 
 export type ServerMessage =
   | { t: 'state'; view: RoomView }

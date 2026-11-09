@@ -1,7 +1,7 @@
 import type { ClientMessage, ServerMessage } from './protocol.ts';
 import {
   createRoom, generateRoomCode, joinRoom, leaveRoom, normalizeCode, seatOf, setConnected, submitAction,
-  submitTeam, tick, viewFor, type GameData, type Result, type Room,
+  submitTeam, tick, touchSeat, viewFor, type GameData, type Result, type Room,
 } from './room.ts';
 
 export interface Outbound {
@@ -17,6 +17,8 @@ export interface ServerOptions extends GameData {
   now: () => number;
   /** 모르는 방 코드에 오류를 답할지 (여러 호스트가 같은 채널을 쓰면 false) */
   replyUnknownRoom?: boolean;
+  /** 요청이 올 때마다 그 사람의 마지막 본 시각을 기록한다(인터넷 서버용, 끊김 감지에 쓴다) */
+  trackPresence?: boolean;
 }
 
 /**
@@ -48,10 +50,11 @@ export class GameServer {
     }
 
     const code = normalizeCode(String((message as { code?: string }).code ?? ''));
-    const room = this.rooms.get(code);
-    if (!room) return this.options.replyUnknownRoom === false ? [] : error('no-room');
+    const stored = this.rooms.get(code);
+    if (!stored) return this.options.replyUnknownRoom === false ? [] : error('no-room');
     const now = this.options.now();
 
+    const room = this.options.trackPresence ? touchSeat(stored, playerId, now) : stored;
     let result: Result;
     switch (message.t) {
       case 'join': result = joinRoom(room, playerId, String(message.name ?? '').slice(0, 12) || '이름없음', now); break;
@@ -61,7 +64,10 @@ export class GameServer {
       case 'leave': result = leaveRoom(room, playerId); break;
       default: return error('bad-message');
     }
-    if (!result.ok) return error(result.error, result.detail);
+    if (!result.ok) {
+      if (room !== stored) this.rooms.set(code, room);
+      return error(result.error, result.detail);
+    }
     this.rooms.set(code, result.room);
     return this.broadcast(result.room);
   }

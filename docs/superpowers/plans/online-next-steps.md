@@ -1,39 +1,46 @@
-# 친구 대전: Supabase에 연결할 때 남은 일
+# 친구 대전: Supabase 인터넷 연결 (2026-11-09 구현함)
 
-2026-11-07 기준. 서버 없이 가능한 부분은 `src/online/`에 끝나 있다. 같은 브라우저의 두 탭에서 방 만들기, 코드로 참가, 팀 3마리 고르기, 끝까지 대전이 된다(화면은 월드의 「친구 대전」 버튼).
+인터넷 대전이 동작한다. 서버 권위 방식이고, 방 로직은 `src/online/`의 순수 TS를 그대로 Edge Function에서 쓴다.
 
-## 이미 있는 것
+## 구조
+
+- **계정**: 익명 로그인. 사용자 id(JWT의 sub)가 playerId다. 클라이언트가 보낸 playerId는 서버가 덮어쓴다. 세션은 localStorage(`oddie-online-auth`)에 남는다.
+- **전달**: 클라이언트는 함수 호출(`supabase.functions.invoke('online')`)로 메시지를 보내고 응답으로 자기 몫을 받는다. 상대 몫은 서버가 Realtime Broadcast REST로 상대의 개인 채널 `player:{비밀값}`에 보낸다. 비밀값은 브라우저가 만든 32자 hex(`oddie-online-secret`)이고 요청마다 함께 보내 서버가 `player_channels`에 저장한다. 상대의 비밀값은 서버만 안다.
+- **방 상태**: `rooms(code, room jsonb, version)`. 요청 하나 = 방 하나 읽기 → 만료 처리(`tick`) → 로직 한 번 → 저장 → broadcast. 동시 요청은 `version` 비교 저장(낙관적 잠금)으로 가리고 충돌하면 다시 읽어 처리한다(최대 5번).
+- **제한시간**: (a) 같은 방에 요청이 올 때마다 먼저 처리, (b) 클라이언트가 deadline 1.5초 뒤 `hello`를 보내 만료 처리를 부탁한다. pg_cron은 쓰지 않는다.
+- **끊김 감지**: 클라이언트가 10초마다 `hello`를 보낸다. 서버는 요청마다 `lastSeen`을 갱신하고, 35초 넘게 신호가 없는 사람을 끊긴 것으로 본다. 끊긴 사람은 제한시간이 지나면 기권패, 돌아오면(아무 요청이나) 연결됨으로 돌아온다.
+- **랭킹**: 방이 `finished`가 되면 `record_match`(SQL 함수)가 `matches.room_code` 유니크로 한 번만 기록하고 점수 변화량(Elo K=32)을 더한다. 전투가 시작된 판만 기록한다. 조회는 읽기 전용 함수 `top_ratings(n)`, `my_rating()`이고 표는 클라이언트가 직접 못 읽는다.
+- **보안**: 표는 RLS 켜짐 + 정책 없음 + service role만 권한(anon/authenticated 권한 회수). 방 코드 추측은 사용자별 1분에 8번 실패까지(`guess_limits`). 팀 검사는 기존 `validate.ts`. 상대 쪽 지난 턴 사건의 체력/피해량은 퍼센트로 바꿔 보낸다.
+
+## 파일
 
 | 파일 | 하는 일 |
 |---|---|
-| `protocol.ts` | 클라이언트/서버 메시지와 공개 상태(`RoomView`) 타입 |
-| `validate.ts` | 팀 검사(3마리, 레벨 1~50, 배울 수 있는 기술 4개 이하, 중복 없음)와 전투용 팀 만들기 |
-| `room.ts` | 방 상태 머신(대기, 팀 고르기, 전투, 종료), 제한시간 60초, 끊김 처리, 공개 상태 필터 `viewFor` |
-| `server.ts` | `GameServer`: 메시지를 받아 "누구에게 무엇을 보낼지" 목록만 돌려준다. 네트워크를 모른다 |
-| `client.ts` | `OnlineClient`: 화면이 보는 상태와 보내기 함수 |
-| `transport.ts` | `Transport { send, onMessage }`: 통로 인터페이스 |
-| `localServer.ts`, `memoryTransport.ts` | BroadcastChannel 통로(두 탭)와 메모리 통로(테스트) |
-| `elo.ts` | Elo 계산(K=32). 아직 어디서도 부르지 않는다 |
+| `supabase/migrations/*.sql` | 표, RLS, 권한, `record_match`, `top_ratings`, `my_rating` |
+| `supabase/functions/online/` | Edge Function(`index.ts`)과 Supabase 저장소(`stores.ts`) |
+| `src/online/edgeHandler.ts` | 요청 한 번을 처리하는 순수 어댑터(저장소 주입, 테스트됨) |
+| `src/online/rateLimit.ts`, `ranking.ts` | 속도 제한, 전적/점수 계산(순수) |
+| `src/online/supabaseTransport.ts` | 브라우저 Transport(익명 로그인, 개인 채널, 10초 hello, 재접속, 랭킹 조회) |
+| `src/ui/OnlineScreen.tsx` | 연결 방식 선택(인터넷/같은 브라우저 탭), 랭킹, 재접속 |
+| `scripts/sync-functions.ts` | 서버 로직을 `supabase/functions/_shared/`로 복사(생성물, git 무시) |
+| `scripts/deploy-functions.ts`, `apply-migrations.ts`, `smoke-online.ts`, `env.ts` | 배포, 마이그레이션 적용, 스모크 테스트 |
 
-방 로직(`room.ts`, `server.ts`, `validate.ts`, `elo.ts`)은 `Math.random`과 `Date`를 쓰지 않는다. 시계와 난수는 밖에서 넣는다.
+## 명령
 
-## 남은 일 (순서대로)
+```
+npm run db:migrate        # supabase/migrations/*.sql 적용 (Management API, Docker 불필요)
+npm run functions:deploy  # 서버 로직 복사 + online 함수 배포
+npm run smoke:online      # 익명 사용자 두 명으로 실제 create → join → 전투 → 랭킹 확인
+```
 
-1. **Supabase 프로젝트와 계정.** 이메일 가입(실제 메일은 받지 않는 방식, 기획서 5장), 로그인. 로그인한 사용자 id를 `playerId`로 쓴다. 지금은 탭마다 임의 UUID다.
-2. **Supabase Realtime 어댑터.** `Transport`를 구현한다. 방 코드마다 채널 하나(`room:{code}`)를 쓰고, `send`는 서버로 보내고 `onMessage`는 자기 `playerId` 앞으로 온 메시지만 받는다. 클라이언트 코드(`OnlineClient`, `OnlineScreen`)는 바꿀 필요가 없다.
-3. **Edge Function(Deno).** `GameServer`를 그대로 올린다. 함수 한 번 호출 = `handle(message)` 한 번이다. 해야 할 일:
-   - 방 상태를 메모리 대신 DB 테이블(`rooms`, `room` JSON 한 칸이면 충분)에 읽고 쓴다. `room.ts`의 `Room`은 JSON으로 그대로 저장된다(함수나 Map이 없다).
-   - `Outbound` 목록을 Realtime 채널로 내보낸다.
-   - `rng`는 `crypto.getRandomValues`로, `now`는 `Date.now`로 넣는다.
-   - `tick()`은 Edge Function을 주기적으로 부르거나(pg_cron 1분 + 클라이언트가 만료 시각에 한 번 더 부르기), 행동을 받을 때마다 같은 방의 시간초과를 먼저 처리하는 방식으로 대신한다. 제한시간 60초는 `deadline`(서버 시계)으로 이미 방에 들어 있다.
-   - 같은 방에 동시에 요청이 오면 겹쳐 쓰지 않게 행 잠금(`select ... for update`)을 쓴다.
-4. **끊김 감지.** Realtime Presence로 `setConnected(false/true)` 호출(`GameServer.disconnect`, `hello`). 끊긴 쪽은 제한시간이 지나면 기권패가 된다.
-5. **랭킹 테이블.** `ratings(user_id, rating default 1000, games, updated_at)`와 `matches(room, winner, loser, reason, played_at)`. 방이 `finished`가 되면 Edge Function이 `eloUpdate`로 점수를 갱신한다(승자가 없으면 0.5점). 한 판에 한 번만 갱신되게 `matches.room`에 유니크 키를 둔다. 랭킹 화면은 `ratings` 상위 N명 조회.
-6. **보안.** 클라이언트가 보낸 `playerId`를 믿지 말고 Supabase 인증 토큰에서 꺼낸 id를 쓴다. 방 코드를 맞히는 시도에는 속도 제한을 둔다. `viewFor`가 상대 행동, 기술, 능력치, 난수 상태를 이미 빼 주지만, `lastEvents`에는 지난 턴 사건이 그대로 들어 있어 상대 체력 숫자가 보인다. 숫자까지 숨기려면 이벤트를 비율로 바꿔 보낸다.
-7. **화면 다듬기.** 지금은 간단한 2D 패널이다. 기획서대로 월드의 3D 전투 장면(`BattleOverlay`)을 재사용하려면 `OnlineScreen`의 행동 선택부를 그쪽 메뉴로 바꾸고 `RoomView`를 `BattleState`처럼 그려야 한다(상대의 숨겨진 정보 때문에 `useBattle`은 그대로 못 쓴다). 재접속용으로 방 코드를 `localStorage`에 저장해 두었다가 `reconnect(code)`를 부르는 것도 아직 안 했다.
-8. **로컬 서버 정리.** 인터넷 대전이 되면 `localServer.ts`는 오프라인 연습용으로 남기거나 지운다.
+모두 프로젝트 루트 `.env.local`의 `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`(스모크는 `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`)를 읽는다. 토큰은 코드나 문서에 쓰지 않는다. 클라이언트에 들어간 것은 공개해도 되는 주소와 publishable key뿐이다(`src/online/supabaseConfig.ts`).
 
-## 알아 둘 것
+## 남은 일
 
-- 팀은 월드에서 잡은 오디(레벨 50까지 잘라서)로 낸다. 기술은 `createBattlePokemon`이 고르는 기본 4개다. 기술 직접 고르기는 `TeamMemberSpec.moveIds`를 채우는 화면만 있으면 된다(검사는 이미 한다).
-- 시간 초과 규칙: 연결된 쪽이 60초 안에 행동하지 않으면 자동으로 쉬고(쓰러진 뒤라면 첫 살아 있는 오디 교체), 연속 3번이면 기권패. 끊긴 쪽은 60초가 지나면 기권패. 팀 고르기는 120초, 안 낸 쪽이 진다.
+- 같은 브라우저의 두 탭은 같은 익명 사용자라 서로 대전할 수 없다(인터넷 모드). 한 기기에서 테스트하려면 다른 브라우저/시크릿 창을 쓰거나 「같은 브라우저 탭」 모드를 쓴다.
+- 익명 계정이라 브라우저 데이터를 지우면 점수가 새로 시작된다. 이메일 계정으로 올리려면 `supabase.auth.updateUser`로 익명 계정을 승격하면 같은 id를 유지한다.
+- 전투 화면은 아직 간단한 2D 패널이다(3D `BattleOverlay` 재사용은 숨겨진 정보 때문에 `RoomView`용 화면이 따로 필요).
+- 오래된 방 정리는 방을 만들 때 가끔(5%) 하루 지난 방을 지우는 방식이다. 방이 많아지면 pg_cron이나 예약 함수로 바꾼다.
+- Realtime 채널이 비공개가 아니다. 비밀값이 채널 이름이라 추측은 불가능하지만, 더 강하게 하려면 Realtime Authorization(비공개 채널 + RLS 정책)으로 옮긴다.
+- 속도 제한은 join/hello의 방 코드 실패만 센다. 함수 호출 자체의 남용은 Supabase 기본 제한에 맡긴다.
+- 스모크가 만든 시험 기록은 삭제해 두었다. 랭킹 표를 비우려면 `ratings`, `matches`를 지우면 된다.
