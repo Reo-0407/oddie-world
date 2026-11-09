@@ -28,7 +28,7 @@ interface Props {
 export function OddieArt({ speciesId, name, types, size = 96 }: Props) {
   const thumb = speciesId === undefined ? null : thumbUrl(speciesId);
   if (thumb) {
-    return <img className="oddie-art oddie-art-img" src={thumb} alt={name} width={size} height={size} loading="lazy" />;
+    return <img className="oddie-art oddie-art-img" src={thumb} alt={name} width={size} height={size} />;
   }
   const first = typeColor(types[0]);
   const second = typeColor(types[1] ?? types[0]);
