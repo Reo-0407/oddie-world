@@ -122,6 +122,8 @@ footer {
   flex-shrink: 0;
 }
 
+.oddie-art-img { background: #fff8; object-fit: contain; }
+
 .name-field { display: flex; flex-direction: column; gap: 4px; margin: 12px 0; font-weight: 600; }
 .name-field input {
   min-height: 48px;
@@ -350,3 +352,14 @@ footer {
 .online .menu-row button.selected { background: #fff3c4; border-color: var(--accent); }
 .ranking { margin: 8px 0; padding: 8px; border: 2px solid var(--line); border-radius: 8px; background: var(--panel); }
 .ranking ol { margin: 0; padding-left: 22px; }
+
+.hud-team { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.hud-mon { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; }
+.hud-mon .oddie-art { border-radius: 8px; border-width: 1px; font-size: 0.6rem; }
+
+/* ---- 로그인 ---- */
+.account-name { align-self: center; font-size: 0.85rem; }
+.auth .menu-row { margin-bottom: 8px; }
+.auth .menu-row button.selected { background: #fff3c4; border-color: var(--accent); }
+.auth form { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.conflict small { opacity: 0.85; }

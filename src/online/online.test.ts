@@ -396,7 +396,9 @@ describe('로컬 서버(BroadcastChannel) 어댑터', () => {
     expect(busA.hosting).toBe(true);
     const code = a.view?.code ?? '';
     b.join(code, 'B');
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    for (let i = 0; i < 100 && !(a.view?.phase === 'teams' && b.view?.phase === 'teams'); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20)); // 다른 테스트와 함께 돌 때 느릴 수 있어 기다려 본다
+    }
     expect(b.view?.phase).toBe('teams');
     expect(a.view?.phase).toBe('teams');
     expect(busB.hosting).toBe(false);

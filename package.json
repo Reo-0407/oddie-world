@@ -13,7 +13,8 @@
     "db:migrate": "tsx scripts/apply-migrations.ts",
     "functions:sync": "tsx scripts/sync-functions.ts",
     "functions:deploy": "tsx scripts/deploy-functions.ts",
-    "smoke:online": "tsx scripts/smoke-online.ts"
+    "smoke:online": "tsx scripts/smoke-online.ts",
+    "smoke:auth": "tsx scripts/smoke-auth.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

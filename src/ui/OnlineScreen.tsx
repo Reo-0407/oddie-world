@@ -17,6 +17,8 @@ import { eventMessage } from './messages.ts';
 
 interface Props {
   name: string;
+  /** 로그인한 계정의 아이디를 이름으로 쓴다(바꿀 수 없다) */
+  lockName?: boolean;
   /** 내 팀과 박스: 여기서 3마리를 고른다 */
   owned: OwnedOddie[];
   onClose: () => void;
@@ -43,7 +45,7 @@ type Mode = 'internet' | 'local';
  * 친구 대전. 기본은 인터넷(Supabase 서버). 설정이 없거나 연결에 실패하면 같은 브라우저의 다른 탭끼리 하는
  * 로컬 모드로 바꿀 수 있다. 어느 쪽이든 화면은 OnlineClient만 본다.
  */
-export function OnlineScreen({ name, owned, onClose }: Props) {
+export function OnlineScreen({ name, lockName = false, owned, onClose }: Props) {
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   const [nameInput, setNameInput] = useState(name);
   const [code, setCode] = useState('');
@@ -140,7 +142,7 @@ export function OnlineScreen({ name, owned, onClose }: Props) {
         )}
         <label className="name-field">
           이름
-          <input value={nameInput} maxLength={12} onChange={(event) => setNameInput(event.target.value)} />
+          <input value={nameInput} maxLength={12} readOnly={lockName} onChange={(event) => setNameInput(event.target.value)} />
         </label>
         <button className="wide" onClick={() => client?.create(nameInput.trim() || name)}>방 만들기</button>
         <label className="name-field">

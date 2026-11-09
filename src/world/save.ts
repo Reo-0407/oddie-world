@@ -1,6 +1,8 @@
 import { MAX_TEAM, type OwnedOddie } from '../game/owned.ts';
 
 export const SAVE_KEY = 'oddie-world-save-v1'; // 키는 그대로 두고 version 필드로 구분한다
+export const SAVE_AT_KEY = 'oddie-world-save-at'; // 이 기기에서 마지막으로 저장한 시각(ms)
+export const OWNER_KEY = 'oddie-world-owner'; // 이 기기의 저장이 누구 것인지(계정 id, 게스트면 'guest')
 export const SAVE_VERSION = 3;
 export const CHARACTER_COUNT = 6; // 옛 저장(0~3)도 그대로 유효
 export const START_LEVEL = 10;
@@ -112,6 +114,7 @@ export function writeSave(data: SaveData, storage: StorageLike | null = defaultS
   try {
     if (!storage) return false;
     storage.setItem(SAVE_KEY, JSON.stringify(data));
+    storage.setItem(SAVE_AT_KEY, String(Date.now()));
     return true;
   } catch {
     return false;
@@ -121,6 +124,40 @@ export function writeSave(data: SaveData, storage: StorageLike | null = defaultS
 export function clearSave(storage: StorageLike | null = defaultStorage()): void {
   try {
     storage?.removeItem(SAVE_KEY);
+  } catch {
+    // 저장소를 못 써도 게임은 계속된다
+  }
+}
+
+/** 이 기기의 저장이 마지막으로 바뀐 시각(ms). 모르면 0 */
+export function loadSaveAt(storage: StorageLike | null = defaultStorage()): number {
+  try {
+    const value = Number(storage?.getItem(SAVE_AT_KEY));
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function loadOwner(storage: StorageLike | null = defaultStorage()): string | null {
+  try { return storage?.getItem(OWNER_KEY) ?? null; } catch { return null; }
+}
+
+export function setOwner(owner: string | null, storage: StorageLike | null = defaultStorage()): void {
+  try {
+    if (owner === null) storage?.removeItem(OWNER_KEY);
+    else storage?.setItem(OWNER_KEY, owner);
+  } catch {
+    // 저장소를 못 써도 게임은 계속된다
+  }
+}
+
+/** 로그아웃 때: 이 기기의 저장과 표식을 모두 비운다(다른 사람이 이어 받지 못하게) */
+export function clearLocalAccountData(storage: StorageLike | null = defaultStorage()): void {
+  clearSave(storage);
+  try {
+    storage?.removeItem(SAVE_AT_KEY);
+    storage?.removeItem(OWNER_KEY);
   } catch {
     // 저장소를 못 써도 게임은 계속된다
   }

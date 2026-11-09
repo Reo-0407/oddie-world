@@ -4,7 +4,7 @@
 
 ## 구조
 
-- **계정**: 익명 로그인. 사용자 id(JWT의 sub)가 playerId다. 클라이언트가 보낸 playerId는 서버가 덮어쓴다. 세션은 localStorage(`oddie-online-auth`)에 남는다.
+- **계정**: 아이디+비밀번호(가짜 이메일 `u<글자별 4자리 hex>@oddie.invalid`, `src/online/account.ts`)와 게스트(익명 로그인). 게스트가 가입하면 `updateUser`로 같은 사용자를 계정으로 바꿔 랭킹을 이어 간다. 클라우드 저장은 `saves` 표(RLS로 본인 행만, 200KB CHECK), `npm run smoke:auth`로 확인한다. 아래는 대전 서버 쪽 설명이다. 이전 설명: 사용자 id(JWT의 sub)가 playerId다. 클라이언트가 보낸 playerId는 서버가 덮어쓴다. 세션은 localStorage(`oddie-online-auth`)에 남는다.
 - **전달**: 클라이언트는 함수 호출(`supabase.functions.invoke('online')`)로 메시지를 보내고 응답으로 자기 몫을 받는다. 상대 몫은 서버가 Realtime Broadcast REST로 상대의 개인 채널 `player:{비밀값}`에 보낸다. 비밀값은 브라우저가 만든 32자 hex(`oddie-online-secret`)이고 요청마다 함께 보내 서버가 `player_channels`에 저장한다. 상대의 비밀값은 서버만 안다.
 - **방 상태**: `rooms(code, room jsonb, version)`. 요청 하나 = 방 하나 읽기 → 만료 처리(`tick`) → 로직 한 번 → 저장 → broadcast. 동시 요청은 `version` 비교 저장(낙관적 잠금)으로 가리고 충돌하면 다시 읽어 처리한다(최대 5번).
 - **제한시간**: (a) 같은 방에 요청이 올 때마다 먼저 처리, (b) 클라이언트가 deadline 1.5초 뒤 `hello`를 보내 만료 처리를 부탁한다. pg_cron은 쓰지 않는다.
@@ -38,7 +38,7 @@ npm run smoke:online      # 익명 사용자 두 명으로 실제 create → joi
 ## 남은 일
 
 - 같은 브라우저의 두 탭은 같은 익명 사용자라 서로 대전할 수 없다(인터넷 모드). 한 기기에서 테스트하려면 다른 브라우저/시크릿 창을 쓰거나 「같은 브라우저 탭」 모드를 쓴다.
-- 익명 계정이라 브라우저 데이터를 지우면 점수가 새로 시작된다. 이메일 계정으로 올리려면 `supabase.auth.updateUser`로 익명 계정을 승격하면 같은 id를 유지한다.
+- 게스트(익명)는 브라우저 데이터를 지우면 점수가 사라진다. 계정을 만들면 영구가 된다.
 - 전투 화면은 아직 간단한 2D 패널이다(3D `BattleOverlay` 재사용은 숨겨진 정보 때문에 `RoomView`용 화면이 따로 필요).
 - 오래된 방 정리는 방을 만들 때 가끔(5%) 하루 지난 방을 지우는 방식이다. 방이 많아지면 pg_cron이나 예약 함수로 바꾼다.
 - Realtime 채널이 비공개가 아니다. 비밀값이 채널 이름이라 추측은 불가능하지만, 더 강하게 하려면 Realtime Authorization(비공개 채널 + RLS 정책)으로 옮긴다.
