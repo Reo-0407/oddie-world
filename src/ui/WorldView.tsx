@@ -1,3 +1,4 @@
+import { OddieArt } from './OddieArt.tsx';
 import { useEffect, useRef, useState } from 'react';
 import { MOVES, speciesById } from '../data/index.ts';
 import type { BattleState } from '../engine/types.ts';
@@ -207,7 +208,17 @@ export function WorldView({ data, onData }: Props) {
       {!battle && (
         <div className="world-hud">
           <div>{data.name} · 코인 {data.coins} · 로프 {data.ropes.basic} · 튼튼한 로프 {data.ropes.sturdy} · 회복약 {data.potions}</div>
-          <div>{data.team.map((oddie) => `${speciesById(oddie.speciesId).name} Lv.${oddie.level}`).join(' / ')}</div>
+          <div className="hud-team">
+            {data.team.map((oddie, index) => {
+              const species = speciesById(oddie.speciesId);
+              return (
+                <span key={index} className="hud-mon">
+                  <OddieArt speciesId={oddie.speciesId} name={species.name} types={species.types} size={28} />
+                  {species.name} Lv.{oddie.level}
+                </span>
+              );
+            })}
+          </div>
         </div>
       )}
       {!battle && <Minimap scene={scene} />}
