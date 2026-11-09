@@ -5,6 +5,7 @@ import { StarterScreen } from './ui/StarterScreen.tsx';
 import { OnlineScreen } from './ui/OnlineScreen.tsx';
 import { useAccountFlow } from './ui/useAccountFlow.ts';
 import { WorldView } from './ui/WorldView.tsx';
+import { markCaught } from './game/dex.ts';
 import { newSave, START_LEVEL } from './world/save.ts';
 import './ui/app.css';
 
@@ -29,7 +30,7 @@ export default function App() {
   } else if (data.team.length === 0) {
     screen = (
       <StarterScreen
-        onPick={(id) => update({ ...data, team: [{ speciesId: id, level: START_LEVEL, exp: 0 }], playerLevel: START_LEVEL })}
+        onPick={(id) => update({ ...data, team: [{ speciesId: id, level: START_LEVEL, exp: 0 }], playerLevel: START_LEVEL, dex: markCaught(data.dex, id) })}
       />
     );
   } else if (online) {

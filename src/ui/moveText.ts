@@ -19,7 +19,7 @@ const DESCRIBERS: { [K in MoveEffect['kind']]: (effect: Extract<MoveEffect, { ki
     const direction = e.delta > 0 ? '올림' : '내림';
     const amount = Math.abs(e.delta) >= 2 ? ' (크게)' : '';
     const chance = e.chance >= 100 ? '' : `${e.chance}% 확률로 `;
-    return `${chance}${who} ${STAT_NAMES[e.stat]}을(를) ${direction}${amount}`;
+    return `${chance}${who} ${STAT_NAMES[e.stat]}${e.stat === 'def' || e.stat === 'spe' ? '를' : '을'} ${direction}${amount}`;
   },
   lowHp: () => '내 체력이 낮을수록 위력 상승',
   revenge: () => '먼저 맞았다면 위력 2배',

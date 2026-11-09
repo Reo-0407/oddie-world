@@ -1,9 +1,10 @@
+import { cleanDex, dexFromOwned, emptyDex, type Dex } from '../game/dex.ts';
 import { MAX_TEAM, type OwnedOddie } from '../game/owned.ts';
 
 export const SAVE_KEY = 'oddie-world-save-v1'; // 키는 그대로 두고 version 필드로 구분한다
 export const SAVE_AT_KEY = 'oddie-world-save-at'; // 이 기기에서 마지막으로 저장한 시각(ms)
 export const OWNER_KEY = 'oddie-world-owner'; // 이 기기의 저장이 누구 것인지(계정 id, 게스트면 'guest')
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const CHARACTER_COUNT = 6; // 옛 저장(0~3)도 그대로 유효
 export const START_LEVEL = 10;
 /** 새 저장의 시작 코인 (옛 저장을 옮길 때는 적용하지 않는다) */
@@ -29,6 +30,8 @@ export interface SaveData {
   playerLevel: number;
   /** 첫 결투(튜토리얼)를 마쳤는지 */
   tutorialDone: boolean;
+  /** 도감: 만난 종과 잡은 종 */
+  dex: Dex;
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -45,7 +48,7 @@ export function newSave(name: string, characterIndex: number): SaveData {
   return {
     version: SAVE_VERSION, name, characterIndex, team: [], box: [],
     ropes: { ...START_ROPES }, coins: START_COINS, potions: 0, playerLevel: START_LEVEL,
-    tutorialDone: false,
+    tutorialDone: false, dex: emptyDex(),
   };
 }
 
@@ -79,10 +82,11 @@ export function parseSave(raw: string | null): SaveData | null {
       const starter = data.starterId;
       if (isCount(starter) && starter > 0) base.team = [{ speciesId: starter, level: START_LEVEL, exp: 0 }];
       base.coins = 0;
+      base.dex = dexFromOwned(base.team);
       return base;
     }
-    // v2는 potions만 없다. 나머지는 v3와 같다
-    if (data.version !== 2 && data.version !== SAVE_VERSION) return null;
+    // v2는 potions가, v3는 dex가 없다. 나머지는 같다
+    if (data.version !== 2 && data.version !== 3 && data.version !== SAVE_VERSION) return null;
 
     const ropes = (data.ropes ?? {}) as Record<string, unknown>;
     base.team = parseOddies(data.team, MAX_TEAM);
@@ -96,6 +100,8 @@ export function parseSave(raw: string | null): SaveData | null {
     // 필드가 없는 옛 v2는 이미 돈을 번 적이 있으면 튜토리얼을 마친 걸로 본다
     base.tutorialDone = typeof data.tutorialDone === 'boolean' ? data.tutorialDone : base.coins > 0;
     base.playerLevel = isCount(data.playerLevel) && data.playerLevel >= 1 ? data.playerLevel : START_LEVEL;
+    // 도감: v4는 저장된 값을 정리해서 쓰고, 그 전 저장은 지금 팀/박스의 오디를 잡은 것으로 채운다
+    base.dex = data.version === SAVE_VERSION ? cleanDex(data.dex) : dexFromOwned([...base.team, ...base.box]);
     return base;
   } catch {
     return null;

@@ -1,3 +1,4 @@
+import { mergeDex } from '../game/dex.ts';
 import { parseSave, type SaveData } from '../world/save.ts';
 
 /** 클라우드 저장 한 건의 크기 상한(서버 표의 CHECK와 같은 값) */
@@ -18,6 +19,17 @@ export function parseCloudData(json: unknown): SaveData | null {
   return parseSave(JSON.stringify(json));
 }
 
+function withoutDex(data: SaveData | undefined) {
+  if (!data) return data;
+  const { dex: _dex, ...rest } = data;
+  return rest;
+}
+
+/** 고른 쪽 저장에 다른 쪽의 도감 기록을 합친다(어느 쪽을 골라도 도감은 줄지 않는다) */
+export function withMergedDex(chosen: SaveData, other: SaveData): SaveData {
+  return { ...chosen, dex: mergeDex(chosen.dex, other.dex) };
+}
+
 export interface SaveSide {
   data: SaveData;
   /** 마지막으로 바뀐 시각(ms) */
@@ -35,7 +47,8 @@ export function decideSync(local: SaveSide | null, cloud: SaveSide | null): Sync
   if (!local && !cloud) return { action: 'none' };
   if (local && !cloud) return { action: 'upload' };
   if (!local && cloud) return { action: 'use-cloud' };
-  if (JSON.stringify(local?.data) === JSON.stringify(cloud?.data)) return { action: 'none' };
+  // 도감만 다른 것은 물어볼 일이 아니다(합쳐서 쓴다)
+  if (JSON.stringify(withoutDex(local?.data)) === JSON.stringify(withoutDex(cloud?.data))) return { action: 'none' };
   return { action: 'ask', newer: (local?.at ?? 0) > (cloud?.at ?? 0) ? 'local' : 'cloud' };
 }
 

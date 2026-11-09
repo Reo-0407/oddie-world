@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MOVES, speciesById } from '../data/index.ts';
 import type { BattleState } from '../engine/types.ts';
 import { createBattle, createBattlePokemon } from '../game/factory.ts';
+import { markCaught, markSeen } from '../game/dex.ts';
 import { addCaught, highestLevel } from '../game/owned.ts';
 import { grantExp, type BattleReport } from '../game/rewards.ts';
 import { withHpRatio } from '../game/tutorial.ts';
@@ -11,6 +12,7 @@ import { MAP_HALF, REGIONS, TOWN_POS } from '../world/regions.ts';
 import { START_LEVEL, type Ropes, type SaveData } from '../world/save.ts';
 import { WorldScene, type NearbyState, type SceneHooks, type WildInfo } from '../world/scene.ts';
 import { BattleOverlay } from './BattleOverlay.tsx';
+import { DexOverlay } from './DexOverlay.tsx';
 import { HealerOverlay, ShopOverlay } from './TownOverlays.tsx';
 
 const JOY_RADIUS = 50;
@@ -83,7 +85,7 @@ export function WorldView({ data, onData }: Props) {
   const [scene, setScene] = useState<WorldScene | null>(null);
   const [battle, setBattle] = useState<ActiveBattle | null>(null);
   const [nearby, setNearby] = useState<NearbyState>({ duel: false, building: null, field: null });
-  const [panel, setPanel] = useState<'shop' | 'healer' | null>(null);
+  const [panel, setPanel] = useState<'shop' | 'healer' | 'dex' | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,7 +106,14 @@ export function WorldView({ data, onData }: Props) {
       onDataRef.current(next);
     };
     const hooks: SceneHooks = {
+      seen: (speciesId) => {
+        const current = dataRef.current;
+        const dex = markSeen(current.dex, speciesId);
+        if (dex !== current.dex) commit({ ...current, dex });
+      },
       duel: (wild) => {
+        const seenDex = markSeen(dataRef.current.dex, wild.speciesId);
+        if (seenDex !== dataRef.current.dex) commit({ ...dataRef.current, dex: seenDex });
         const current = dataRef.current;
         setBattle({ state: startBattle(current, wild), tutorial: !current.tutorialDone });
       },
@@ -116,7 +125,7 @@ export function WorldView({ data, onData }: Props) {
       caught: (wild) => {
         const current = dataRef.current;
         const added = addCaught(current.team, current.box, { speciesId: wild.speciesId, level: wild.level, exp: 0 });
-        commit({ ...current, team: added.team, box: added.box });
+        commit({ ...current, team: added.team, box: added.box, dex: markCaught(current.dex, wild.speciesId) });
         const name = speciesById(wild.speciesId).name;
         setToast(`${name} 포획! ${added.toBox ? '팀이 가득 차서 박스로 갔어.' : '팀에 들어왔어.'}`);
       },
@@ -172,6 +181,7 @@ export function WorldView({ data, onData }: Props) {
       coins: current.coins + report.coins,
       playerLevel: highestLevel(report.team, START_LEVEL),
       tutorialDone: current.tutorialDone || (battle?.tutorial ?? false),
+      dex: report.caught ? markCaught(current.dex, report.caught.speciesId) : current.dex,
     };
     dataRef.current = next;
     onData(next);
@@ -222,6 +232,7 @@ export function WorldView({ data, onData }: Props) {
         </div>
       )}
       {!battle && <Minimap scene={scene} />}
+      {!battle && <button className="dex-button" onClick={() => setPanel('dex')}>도감</button>}
       {toast && <div className="toast" role="status">{toast}</div>}
 
       {!battle && (
@@ -256,6 +267,7 @@ export function WorldView({ data, onData }: Props) {
         </>
       )}
 
+      {panel === 'dex' && <DexOverlay dex={data.dex} onClose={() => setPanel(null)} />}
       {panel === 'shop' && (
         <ShopOverlay
           inventory={{ coins: data.coins, ropes: data.ropes, potions: data.potions }}

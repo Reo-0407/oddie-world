@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { currentAccount, signOutAccount, type Account } from '../online/accountClient.ts';
 import { deleteCloudSave, fetchCloudSave, uploadCloudSave } from '../online/cloudSave.ts';
-import { decideSync, type SaveSide } from '../online/saveSync.ts';
+import { decideSync, withMergedDex, type SaveSide } from '../online/saveSync.ts';
 import {
   clearLocalAccountData, clearSave, loadOwner, loadSave, loadSaveAt, setOwner, writeSave, type SaveData,
 } from '../world/save.ts';
@@ -99,6 +99,14 @@ export function useAccountFlow() {
     } else if (decision.action === 'ask' && local && cloud) {
       setData(local.data);
       setConflict({ local, cloud, newer: decision.newer });
+    } else if (local && cloud) {
+      // 같은 게임: 도감 기록만 합친다(어느 한쪽이 더 많이 알고 있을 수 있다)
+      const merged = withMergedDex(local.data, cloud.data);
+      if (JSON.stringify(merged.dex) !== JSON.stringify(local.data.dex)) {
+        writeSave(merged);
+        scheduleUpload(merged);
+      }
+      setData(merged);
     } else {
       setData(local?.data ?? cloud?.data ?? null);
     }
@@ -190,9 +198,11 @@ export function useAccountFlow() {
     const current = conflictRef.current;
     if (!current) return;
     const picked = choice === 'local' ? current.local : current.cloud;
-    writeSave(picked.data);
-    setData(picked.data);
-    if (choice === 'local') scheduleUpload(picked.data);
+    const other = choice === 'local' ? current.cloud : current.local;
+    const result = withMergedDex(picked.data, other.data); // 어느 쪽을 골라도 도감 기록은 합친다
+    writeSave(result);
+    setData(result);
+    if (choice === 'local' || JSON.stringify(result.dex) !== JSON.stringify(picked.data.dex)) scheduleUpload(result);
     setConflict(null);
   }, [scheduleUpload]);
 

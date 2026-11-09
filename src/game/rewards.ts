@@ -19,7 +19,7 @@ export interface BattleReport {
   team: OwnedOddie[];
   box: OwnedOddie[];
   /** 잡은 오디 이름 (박스로 갔는지 포함) */
-  caught: { name: string; toBox: boolean } | null;
+  caught: { name: string; toBox: boolean; speciesId: number } | null;
 }
 
 interface SettleInput {
@@ -61,7 +61,7 @@ export function settleBattle(input: SettleInput): BattleReport {
     const added = addCaught(report.team, report.box, { speciesId: wild.id, level: input.wildLevel, exp: 0 });
     report.team = added.team;
     report.box = added.box;
-    report.caught = { name: wild.name, toBox: added.toBox };
+    report.caught = { name: wild.name, toBox: added.toBox, speciesId: wild.id };
   }
   return report;
 }

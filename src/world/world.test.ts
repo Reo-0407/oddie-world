@@ -106,17 +106,18 @@ describe('저장', () => {
       ...newSave('준우', 3),
       coins: 0, // 옛 저장은 시작 코인을 받지 않는다
       team: [{ speciesId: 42, level: 10, exp: 0 }],
+      dex: { seen: [42], caught: [42] }, // 옛 저장은 팀의 오디를 잡은 것으로 채운다
     });
     expect(loadSave(fakeStorage({ [SAVE_KEY]: old }))?.ropes).toEqual({ basic: 5, sturdy: 1 });
   });
   it('v2 저장은 potions 0으로 옮기고 나머지는 그대로', () => {
-    const { potions: _p, version: _v, ...rest } = data;
+    const { potions: _p, version: _v, dex: _d, ...rest } = data;
     const parsed = parseSave(JSON.stringify({ ...rest, version: 2 }));
-    expect(parsed).toEqual({ ...data, potions: 0 });
-    expect(parsed?.version).toBe(3);
+    expect(parsed).toEqual({ ...data, potions: 0, dex: { seen: [3, 42], caught: [3, 42] } }); // 팀과 박스
+    expect(parsed?.version).toBe(4);
   });
   it('새 저장은 코인 100, 회복약 0', () => {
-    expect(newSave('a', 0)).toMatchObject({ coins: 100, potions: 0, version: 3 });
+    expect(newSave('a', 0)).toMatchObject({ coins: 100, potions: 0, version: 4, dex: { seen: [], caught: [] } });
   });
   it('옛 v1에 스타터가 없으면 빈 팀', () => {
     expect(parseSave(JSON.stringify({ name: 'a', characterIndex: 0 }))?.team).toEqual([]);

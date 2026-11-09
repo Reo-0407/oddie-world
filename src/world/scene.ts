@@ -75,6 +75,8 @@ export interface SceneHooks {
   /** 출동으로 야생 오디를 쓰러뜨려 선두 오디가 경험치를 받는다 */
   gainExp(exp: number, wild: WildInfo): void;
   toast(text: string): void;
+  /** 이 종을 만났다 (필드 로프, 출동 때; 결투는 duel로 알린다) */
+  seen(speciesId: number): void;
   /** 다른 구역에 들어갔다 */
   region(name: string): void;
 }
@@ -293,6 +295,7 @@ export class WorldScene {
     this.busy = true;
     wild.frozen = true;
     this.publishNearby();
+    this.hooks.seen(wild.speciesId);
     this.hooks.spendRope(kind);
     const chance = fieldCatchChance(speciesById(wild.speciesId).rarity, wild.hpRatio, wild.status, kind);
     const from = new THREE.Vector3(this.playerPos.x, 1, this.playerPos.z);
@@ -323,6 +326,7 @@ export class WorldScene {
     if (!wild || this.mode !== 'explore' || this.busy) return;
     const lead = this.getData().team[0];
     if (!lead) return;
+    this.hooks.seen(wild.speciesId);
     const mine = createBattlePokemon(speciesById(lead.speciesId), lead.level, MOVES);
     let foe = withHpRatio(createBattlePokemon(speciesById(wild.speciesId), wild.level, MOVES), wild.hpRatio);
     if (wild.status) foe = { ...foe, status: wild.status, sleepTurns: wild.status === 'sleep' ? 2 : 0 };
