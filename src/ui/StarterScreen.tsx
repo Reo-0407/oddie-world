@@ -12,7 +12,7 @@ export function StarterScreen({ onPick }: { onPick: (speciesId: number) => void 
           const species = speciesById(id);
           return (
             <button key={id} className="starter" onClick={() => onPick(id)}>
-              <OddieArt speciesId={id} name={species.name} types={species.types} size={96} />
+              <OddieArt speciesId={id} name={species.name} types={species.types} size={112} />
               {species.name}
             </button>
           );

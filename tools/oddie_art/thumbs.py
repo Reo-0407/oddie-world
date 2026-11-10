@@ -20,22 +20,47 @@ for path in sorted(glob.glob(os.path.join(src, '*.glb'))):
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.separate(type='LOOSE')
         bpy.ops.object.mode_set(mode='OBJECT')
+    import bmesh
+    def bounds(objs):
+        pts = [o.matrix_world @ Vector(c) for o in objs for c in o.bound_box]
+        return (Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts))),
+                Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts))))
     meshes = [o for o in bpy.context.scene.objects if o.type == 'MESH']
-    # 바닥판(납작하고 넓은 조각)은 캐릭터가 아니므로 지운다
-    def dims(o):
-        return o.dimensions
-    biggest = max(max(dims(o)) for o in meshes)
-    for o in list(meshes):
-        d = sorted(dims(o))
-        if len(meshes) > 1 and d[0] < 0.06 * d[2] and d[2] > 0.5 * biggest:
-            bpy.data.objects.remove(o, do_unlink=True)
-            print('PLATE', os.path.basename(path))
-    meshes = [o for o in bpy.context.scene.objects if o.type == 'MESH']
+    lo, hi = bounds(meshes)
+    H = hi.z - lo.z
+    # 바닥판: 맨 아래 띠의 평평한 면을 지우고, 떨어진 조각 중 납작하거나 아주 작은 것을 지운다
+    for o in meshes:
+        bm = bmesh.new(); bm.from_mesh(o.data)
+        mw = o.matrix_world
+        kill = [f for f in bm.faces if abs((mw.to_3x3() @ f.normal).z) > 0.85 and (mw @ f.calc_center_median()).z < lo.z + 0.10 * H]
+        if kill:
+            bmesh.ops.delete(bm, geom=kill, context='FACES')
+        seen = set(); comps = []
+        for f in bm.faces:
+            if f.index in seen:
+                continue
+            stack = [f]; seen.add(f.index); comp = []
+            while stack:
+                cur = stack.pop(); comp.append(cur)
+                for e in cur.edges:
+                    for nf in e.link_faces:
+                        if nf.index not in seen:
+                            seen.add(nf.index); stack.append(nf)
+            comps.append(comp)
+        def ext(comp):
+            vs = {v for f in comp for v in f.verts}
+            ps = [mw @ v.co for v in vs]
+            return [max(q[i] for q in ps) - min(q[i] for q in ps) for i in range(3)]
+        big = max((max(ext(c)) for c in comps), default=0)
+        for c in comps:
+            d = sorted(ext(c))
+            if len(comps) > 1 and ((d[0] < 0.08 * d[2] and d[2] > 0.4 * big) or d[2] < 0.22 * big):
+                bmesh.ops.delete(bm, geom=c, context='FACES')
+        bm.to_mesh(o.data); bm.free()
+    meshes = [o for o in bpy.context.scene.objects if o.type == 'MESH' and len(o.data.polygons) > 0]
     if not meshes:
         continue
-    pts = [o.matrix_world @ Vector(c) for o in meshes for c in o.bound_box]
-    lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
-    hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
+    lo, hi = bounds(meshes)
     center = (lo + hi) / 2
     radius = max((hi - lo).length / 2, 0.01)
 
@@ -52,16 +77,24 @@ for path in sorted(glob.glob(os.path.join(src, '*.glb'))):
     scene.view_settings.view_transform = 'Standard'
 
     cam_data = bpy.data.cameras.new('cam')
-    cam_data.lens = 50
+    cam_data.type = 'ORTHO'
     cam = bpy.data.objects.new('cam', cam_data)
     scene.collection.objects.link(cam)
     scene.camera = cam
-    dist = radius * 3.2
-    angle = math.radians(25)   # 정면(-Y)에서 오른쪽으로 25도
+    dist = radius * 4
+    angle = math.radians(25)
     elev = math.radians(15)
     cam.location = center + Vector((math.sin(angle) * math.cos(elev), -math.cos(angle) * math.cos(elev), math.sin(elev))) * dist
-    direction = center - cam.location
-    cam.rotation_euler = direction.to_track_quat('-Z', 'Y').to_euler()
+    cam.rotation_euler = (center - cam.location).to_track_quat('-Z', 'Y').to_euler()
+    bpy.context.view_layer.update()
+    inv = cam.matrix_world.inverted()
+    loc = [inv @ (o.matrix_world @ v.co) for o in meshes for v in o.data.vertices]
+    xs = sorted(p.x for p in loc); ys = sorted(p.y for p in loc)
+    k = max(1, len(xs) // 40)
+    xs = xs[k:-k]; ys = ys[k:-k]
+    cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+    cam.location = cam.matrix_world @ Vector((cx, cy, 0))
+    cam_data.ortho_scale = max(max(xs) - min(xs), max(ys) - min(ys)) * 1.22
 
     scene.render.filepath = out
     bpy.ops.render.render(write_still=True)

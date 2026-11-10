@@ -387,3 +387,17 @@ footer {
 .dex-line { opacity: 0.85; }
 .world-bar { flex-wrap: wrap; align-items: center; }
 .world-bar button { white-space: nowrap; }
+
+/* 스타터 선택 화면 */
+.starters { gap: 12px; }
+.starter {
+  gap: 8px;
+  padding: 14px 6px 12px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #e6f1ff 100%);
+  box-shadow: 0 3px 0 var(--line);
+  font-size: 1.05rem;
+  transition: transform 0.12s;
+}
+.starter:hover, .starter:active { transform: translateY(-3px); }
+.starter .oddie-art-img { border: 0; background: radial-gradient(circle, #fff 30%, #d9e8f7 100%); border-radius: 50%; max-width: 100%; }
