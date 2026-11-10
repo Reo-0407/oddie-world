@@ -85,10 +85,10 @@ export interface SceneHooks {
 /** 연출용 보정값: 위치 어긋남, 크기, 흔들림, 깜빡임 */
 interface Fx {
   offX: number; offY: number; offZ: number;
-  scale: number; shake: number; blink: number; hidden: boolean;
+  scale: number; shake: number; blink: number; hidden: boolean; tilt: number;
 }
 
-const newFx = (): Fx => ({ offX: 0, offY: 0, offZ: 0, scale: 1, shake: 0, blink: 0, hidden: false });
+const newFx = (): Fx => ({ offX: 0, offY: 0, offZ: 0, scale: 1, shake: 0, blink: 0, hidden: false, tilt: 0 });
 
 interface Wild {
   key: number;
@@ -126,6 +126,7 @@ function applyFx(holder: THREE.Object3D, x: number, z: number, fx: Fx, clock: nu
   const jitter = fx.shake > 0 ? Math.sin(clock * 60) * fx.shake : 0;
   holder.position.set(x + fx.offX + jitter, fx.offY, z + fx.offZ);
   holder.scale.setScalar(Math.max(fx.scale, 0.001));
+  holder.rotation.z = fx.tilt;
   holder.visible = !fx.hidden && !(fx.blink > 0 && Math.floor(clock * 16) % 2 === 0);
 }
 
@@ -138,6 +139,8 @@ export class WorldScene {
   private disposables: { dispose(): void }[] = [];
   private tweens: Tween[] = [];
   private keys = new Set<string>();
+  private camYaw = 0; // 카메라가 플레이어 둘레를 도는 각도 (드래그, Q/E)
+  private dragId: number | null = null;
   private wilds: Wild[] = [];
 
   private playerRoot = new THREE.Group();
@@ -247,6 +250,11 @@ export class WorldScene {
       this.wilds.push(wild);
     }
 
+    const dom = this.renderer.domElement;
+    dom.addEventListener('pointerdown', this.onDragStart);
+    dom.addEventListener('pointermove', this.onDragMove);
+    dom.addEventListener('pointerup', this.onDragEnd);
+    dom.addEventListener('pointercancel', this.onDragEnd);
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onBlur);
@@ -364,7 +372,7 @@ export class WorldScene {
       case 'move': void this.lunge(event.side); break;
       case 'damage': case 'confusionHit': case 'delayedHit': case 'statusDamage': case 'recoil':
         this.hit(fxOf(event.side)); break;
-      case 'faint': void this.faint(fxOf(event.side)); break;
+      case 'faint': void this.faint(fxOf(event.side), event.side === 1); break;
       case 'stage': this.arrows(event.side, event.delta > 0); break;
       case 'heal': this.arrows(event.side, true); break;
       case 'switch':
@@ -406,6 +414,10 @@ export class WorldScene {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onBlur);
+    this.renderer.domElement.removeEventListener('pointerdown', this.onDragStart);
+    this.renderer.domElement.removeEventListener('pointermove', this.onDragMove);
+    this.renderer.domElement.removeEventListener('pointerup', this.onDragEnd);
+    this.renderer.domElement.removeEventListener('pointercancel', this.onDragEnd);
     this.removeBall();
     disposeObject(this.player);
     this.models.dispose(disposeObject);
@@ -777,7 +789,12 @@ export class WorldScene {
     void this.tween(0.45, (p) => { fx.shake = 0.14 * (1 - p); });
   }
 
-  private async faint(fx: Fx) {
+  private async faint(fx: Fx, lieDown = false) {
+    if (lieDown) {
+      // 야생 오디는 사라지지 않고 쓰러져 누워 있다 (로프를 던져 잡을 수 있다)
+      await this.tween(0.5, (p) => { fx.tilt = p * 1.45; });
+      return;
+    }
     await this.tween(0.6, (p) => { fx.scale = Math.max(0.001, 1 - p); });
     fx.hidden = true;
   }
@@ -892,6 +909,12 @@ export class WorldScene {
   };
   private onKeyUp = (event: KeyboardEvent) => { this.keys.delete(event.key.toLowerCase()); };
   private onBlur = () => { this.keys.clear(); };
+  private onDragStart = (e: PointerEvent) => { if (this.mode === 'explore') this.dragId = e.pointerId; };
+  private onDragMove = (e: PointerEvent) => {
+    if (this.dragId !== e.pointerId || this.mode !== 'explore') return;
+    this.camYaw -= e.movementX * 0.008;
+  };
+  private onDragEnd = (e: PointerEvent) => { if (this.dragId === e.pointerId) this.dragId = null; };
 
   private resize = () => {
     const { clientWidth: width, clientHeight: height } = this.container;
@@ -927,7 +950,9 @@ export class WorldScene {
     if (this.mode !== 'explore' || this.busy || this.locked) return;
     const keyMove = keysToMove(this.keys);
     const raw = keyMove.x !== 0 || keyMove.z !== 0 ? keyMove : this.input;
-    const move = inputToWorld(raw, 0);
+    if (this.keys.has('q')) this.camYaw += 1.8 * dt;
+    if (this.keys.has('e')) this.camYaw -= 1.8 * dt;
+    const move = inputToWorld(raw, this.camYaw);
     const moving = move.x !== 0 || move.z !== 0;
     if (moving) {
       const next = clampToArea(
@@ -1042,8 +1067,10 @@ export class WorldScene {
       const focusDist = height / Math.tan(below + 0.1);
       focus = new THREE.Vector3(goal.x - sideX * focusDist, 0, goal.z - sideZ * focusDist);
     } else {
-      goal = new THREE.Vector3(this.playerPos.x, 6.8, this.playerPos.z + 8.5);
-      focus = new THREE.Vector3(this.playerPos.x, 1.1, this.playerPos.z - 2.5);
+      const sy = Math.sin(this.camYaw);
+      const cy = Math.cos(this.camYaw);
+      goal = new THREE.Vector3(this.playerPos.x + sy * 8.5, 6.8, this.playerPos.z + cy * 8.5);
+      focus = new THREE.Vector3(this.playerPos.x - sy * 2.5, 1.1, this.playerPos.z - cy * 2.5);
     }
     this.camera.position.lerp(goal, k);
     this.look.lerp(focus, k);

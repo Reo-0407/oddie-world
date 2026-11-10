@@ -128,6 +128,7 @@ export function useBattle(initial: BattleState, hooks: BattleHooks = {}) {
         return;
       }
       setMessage('로프가 풀려 버렸다!');
+      if (state.winner === 0) { setPlaying(false); return; } // 쓰러뜨린 뒤에는 상대가 움직이지 않는다
       timer.current = setTimeout(() => {
         finishTurn(resolveTurn(state, [{ kind: 'pass' }, chooseAiAction(state, 1)]));
       }, EVENT_DELAY_MS);

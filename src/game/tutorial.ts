@@ -20,7 +20,7 @@ export function withHpRatio(pokemon: BattlePokemon, ratio: number): BattlePokemo
 export function tutorialHint(movesUsed: number): string {
   return movesUsed === 0
     ? '기술을 골라 공격해 봐!'
-    : '체력이 줄었어! 가방에서 로프를 던져 봐';
+    : '상대를 쓰러뜨려 봐! 이기면 로프를 던져 잡을 수 있어';
 }
 
 /** 전투 결과 판정: 잡았으면 caught, 아니면 승패. 아직 안 끝났으면 null */

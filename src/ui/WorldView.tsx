@@ -253,8 +253,6 @@ export function WorldView({ data, onData }: Props) {
                 <div className="field-info">
                   {nearby.field.name} Lv.{nearby.field.level} · 체력 {nearby.field.hpPct}%
                 </div>
-                <button className="field-button" onClick={() => void scene?.fieldThrow()}>로프 던지기</button>
-                <button className="field-button" onClick={() => scene?.skirmish()}>출동!</button>
               </>
             )}
             {nearby.building && (

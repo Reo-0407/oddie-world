@@ -58,6 +58,7 @@ export function BattleOverlay({ initial, team, box, ropes, potions, tutorial, sc
   const [potionsLeft, setPotionsLeft] = useState(potions);
   const [movesUsed, setMovesUsed] = useState(0);
   const [thrown, setThrown] = useState(0);
+  const [released, setReleased] = useState(false);
   const longPressed = useRef(false);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -72,7 +73,9 @@ export function BattleOverlay({ initial, team, box, ropes, potions, tutorial, sc
   const myShownHp = shown.hp[0];
   const busy = playing || over;
 
-  const report = outcome && !playing
+  // 이겼으면 로프를 던져 잡을 수 있다 (로프가 없거나 보내 주기로 하면 바로 정산)
+  const canCatch = outcome === 'won' && !released && ropesLeft.basic + ropesLeft.sturdy > 0;
+  const report = outcome && !playing && !canCatch
     ? settleBattle({
       outcome,
       team,
@@ -102,6 +105,7 @@ export function BattleOverlay({ initial, team, box, ropes, potions, tutorial, sc
     setRopesLeft({ ...ropesLeft, [kind]: ropesLeft[kind] - 1 });
     const target = opponent.team[opponent.active];
     const chance = catchChance(speciesById(target.speciesId).rarity, target.hp / target.stats.hp, target.status, kind);
+    setReleased(false);
     throwRope(ropeSequence(chance, Math.random, tutorial && thrown === 0));
   };
 
@@ -159,6 +163,18 @@ export function BattleOverlay({ initial, team, box, ropes, potions, tutorial, sc
           </div>
         )}
 
+        {canCatch && !playing && !caught && (
+          <div className="team">
+            <p className="hint">쓰러뜨렸다! 로프를 던져 잡을까?</p>
+            {(['basic', 'sturdy'] as RopeKind[]).map((kind) => (
+              <button key={kind} disabled={ropesLeft[kind] <= 0} onClick={() => throwOne(kind)}>
+                {ROPE_NAMES[kind]} 던지기 ({ropesLeft[kind]}개) · 성공률 {Math.round(catchChance(speciesById(wild.speciesId).rarity, 0, wild.status, kind) * 100)}%
+              </button>
+            ))}
+            <button onClick={() => setReleased(true)}>그냥 보내 주기</button>
+          </div>
+        )}
+
         {!busy && !showTeam && !bagOpen && (
           <>
             {detail && (
@@ -201,11 +217,6 @@ export function BattleOverlay({ initial, team, box, ropes, potions, tutorial, sc
 
         {!busy && bagOpen && !showTeam && (
           <div className="team">
-            {(['basic', 'sturdy'] as RopeKind[]).map((kind) => (
-              <button key={kind} disabled={ropesLeft[kind] <= 0} onClick={() => throwOne(kind)}>
-                로프 던지기: {ROPE_NAMES[kind]} ({ropesLeft[kind]}개)
-              </button>
-            ))}
             <button disabled={potionsLeft <= 0 || healAmount <= 0} onClick={drinkPotion}>
               {ITEM_NAMES.potion} 쓰기 ({potionsLeft}개){healAmount > 0 ? ` · +${healAmount}` : ' · 체력이 가득해'}
             </button>
