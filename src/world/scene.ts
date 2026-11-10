@@ -34,7 +34,7 @@ const GRACE_SECONDS = 3; // 전투에서 돌아온 직후엔 자동 결투를 �
 const WILD_SCALE = 1.6; // 필드에서 야생 오디를 크게 보여 준다
 const AGGRESSIVE_RATE = 0.4; // 이 비율의 야생 오디만 먼저 다가온다
 const FIELD_RANGE = 8; // 필드 로프/출동 가능 거리
-const BATTLE_GAP = 3.6;
+const BATTLE_GAP = 4.4;
 const TOWN = TOWN_POS; // 마을 구역 중심 (상점, 회복소)
 const TOWN_RADIUS = 9;
 const ENTER_RANGE = 2.6;
@@ -391,6 +391,7 @@ export class WorldScene {
     const wild = this.engaged;
     this.mode = 'explore';
     this.engaged = null;
+    for (const other of this.wilds) if (other !== wild && other.alive) other.holder.visible = true;
     this.removeBall();
     this.allyHolder.visible = false;
     this.playerRoot.visible = true;
@@ -638,6 +639,7 @@ export class WorldScene {
       wild.pivot.add(object);
       const label = this.makeLabel(`${speciesById(speciesId).name} Lv.${wild.level}`);
       label.name = 'label';
+      label.visible = this.engaged !== wild;
       label.position.y = MODEL_HEIGHT * WILD_SCALE + 0.55;
       wild.holder.add(label);
     });
@@ -702,6 +704,8 @@ export class WorldScene {
       wild.status = null;
     }
     this.mode = 'battle';
+    for (const c of wild.holder.children) if (c.name === 'label') c.visible = false;
+    for (const other of this.wilds) if (other !== wild) other.holder.visible = false; // 싸우는 동안 다른 야생 오디는 숨긴다
     this.engaged = wild;
     wild.marker.visible = false;
     wild.frozen = false;
@@ -743,6 +747,7 @@ export class WorldScene {
     void this.tween(0.5, (p) => { this.allyFx.scale = Math.max(0.01, p); });
     void this.models.create(speciesId).then((object) => {
       if (this.disposed || this.allyToken !== token) return;
+      object.scale.multiplyScalar(WILD_SCALE);
       this.allyPivot.add(object);
     });
   }
@@ -970,6 +975,7 @@ export class WorldScene {
       const t = this.clock * (walking ? 8 : 2) + wild.phase;
       wild.fx.blink = Math.max(0, wild.fx.blink - dt);
       applyFx(wild.holder, wild.state.x, wild.state.z, wild.fx, this.clock);
+      if (this.mode === 'battle' && !isEngaged) wild.holder.visible = false;
       wild.holder.rotation.y = wild.state.heading;
       if (walking) {
         wild.pivot.position.y = Math.abs(Math.sin(t)) * 0.15;
@@ -1028,12 +1034,12 @@ export class WorldScene {
       if (sideZ < 0) { sideX = -sideX; sideZ = -sideZ; } // 항상 화면 아래쪽에서 바라본다
       // 세로로 긴 화면에서도 두 오디가 다 들어오게 화면 비율에 맞춰 물러난다
       const halfTan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
-      const dist = Math.max(5.2, (BATTLE_GAP / 2 + 1.2) / (this.camera.aspect * halfTan));
-      const height = 2.4 + dist * 0.18;
+      const dist = Math.max(6.5, (BATTLE_GAP / 2 + 1.9) / (this.camera.aspect * halfTan));
+      const height = 2.8 + dist * 0.2;
       goal = new THREE.Vector3(midX + sideX * dist, height, midZ + sideZ * dist);
       // 아래쪽 메뉴가 화면을 가리므로, 카메라를 조금 더 숙여 두 오디를 화면 위쪽에 올린다
       const below = Math.atan((height - 0.7) / dist);
-      const focusDist = height / Math.tan(below + 0.21);
+      const focusDist = height / Math.tan(below + 0.1);
       focus = new THREE.Vector3(goal.x - sideX * focusDist, 0, goal.z - sideZ * focusDist);
     } else {
       goal = new THREE.Vector3(this.playerPos.x, 6.8, this.playerPos.z + 8.5);

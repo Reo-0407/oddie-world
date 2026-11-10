@@ -17,6 +17,18 @@ export class OddieModels {
     let pending = this.templates.get(speciesId);
     if (!pending) {
       pending = this.loader.loadAsync(modelUrl(speciesId)).then((gltf) => {
+        // 어두운 PBR 재질을 밝고 부드럽게: 금속성 제거, 텍스처를 약하게 스스로 빛나게
+        gltf.scene.traverse((node) => {
+          const mesh = node as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+            const m = material as THREE.MeshStandardMaterial;
+            if (!m.isMeshStandardMaterial) continue;
+            m.metalness = 0;
+            m.roughness = 1;
+            if (m.map) { m.emissive = new THREE.Color('#ffffff'); m.emissiveMap = m.map; m.emissiveIntensity = 0.5; }
+          }
+        });
         const wrapper = new THREE.Group();
         wrapper.add(gltf.scene);
         const box = new THREE.Box3().setFromObject(wrapper);

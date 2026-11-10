@@ -406,3 +406,10 @@ footer {
 .world-hud { right: 96px; padding: 6px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.85); box-shadow: 0 2px 0 rgba(35,38,43,.35); font-size: 0.85rem; }
 .hud-mon { padding: 2px 6px 2px 2px; border-radius: 12px; background: #eef3f8; }
 .toast { top: 84px; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: calc(100% - 120px); text-align: center; }
+
+/* 전투 화면: 아래 메뉴를 얇게 */
+.b-bottom { padding: 6px; gap: 4px; background: rgba(255, 255, 255, 0.6); border-top: 0; max-height: 46%; }
+.hint { padding: 3px 8px; font-size: 0.85rem; }
+.b-bottom .message { padding: 4px 8px; font-size: 0.9rem; }
+.move-wrap .move { min-height: 52px; }
+.b-plate { border-radius: 12px; }
