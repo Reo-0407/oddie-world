@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MOVES, speciesById } from '../data/index.ts';
 import type { BattleState } from '../engine/types.ts';
 import { createBattle, createBattlePokemon } from '../game/factory.ts';
-import { markCaught, markSeen } from '../game/dex.ts';
+import { dexMilestoneReward, markCaught, markSeen } from '../game/dex.ts';
 import { addCaught, highestLevel } from '../game/owned.ts';
 import { grantExp, type BattleReport } from '../game/rewards.ts';
 import { withHpRatio } from '../game/tutorial.ts';
@@ -183,8 +183,14 @@ export function WorldView({ data, onData }: Props) {
       tutorialDone: current.tutorialDone || (battle?.tutorial ?? false),
       dex: report.caught ? markCaught(current.dex, report.caught.speciesId) : current.dex,
     };
+    const bonus = report.caught ? dexMilestoneReward(current.dex.caught.length, next.dex.caught.length) : null;
+    if (bonus) {
+      next.coins += bonus.coins;
+      next.ropes = { ...next.ropes, basic: next.ropes.basic + bonus.ropes, sturdy: next.ropes.sturdy + bonus.sturdy };
+    }
     dataRef.current = next;
     onData(next);
+    if (bonus) setToast(`도감 ${next.dex.caught.length}종 달성! 코인 +${bonus.coins}, 로프 +${bonus.ropes}, 튼튼한 로프 +${bonus.sturdy}`);
     sceneRef.current?.exitBattle();
     setBattle(null);
     if (report.outcome === 'fled') setToast('무사히 도망쳤다!');

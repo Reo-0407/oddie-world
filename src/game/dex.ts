@@ -67,3 +67,11 @@ export function cleanDex(value: unknown): Dex {
   const seen = [...new Set([...ids(raw.seen), ...caught])].sort((a, b) => a - b);
   return { seen, caught };
 }
+
+/** 새 종을 5마리 잡을 때마다 주는 도감 보상. 넘어간 칸마다 합쳐서 준다 */
+export const DEX_MILESTONE_STEP = 5;
+export function dexMilestoneReward(beforeCaught: number, afterCaught: number): { steps: number; coins: number; ropes: number; sturdy: number } | null {
+  const steps = Math.floor(afterCaught / DEX_MILESTONE_STEP) - Math.floor(beforeCaught / DEX_MILESTONE_STEP);
+  if (steps <= 0) return null;
+  return { steps, coins: 150 * steps, ropes: 3 * steps, sturdy: steps };
+}

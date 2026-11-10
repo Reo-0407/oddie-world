@@ -370,8 +370,14 @@ export class WorldScene {
     const fxOf = (side: 0 | 1) => (side === 0 ? this.allyFx : engaged.fx);
     switch (event.t) {
       case 'move': void this.lunge(event.side); break;
-      case 'damage': case 'confusionHit': case 'delayedHit': case 'statusDamage': case 'recoil':
-        this.hit(fxOf(event.side)); break;
+      case 'damage':
+        this.hit(fxOf(event.side));
+        this.impact(event.side, event.amount, event.effectiveness, event.critical);
+        break;
+      case 'confusionHit': case 'delayedHit': case 'statusDamage': case 'recoil':
+        this.hit(fxOf(event.side));
+        this.impact(event.side, event.amount, 1, false);
+        break;
       case 'faint': void this.faint(fxOf(event.side), event.side === 1); break;
       case 'stage': this.arrows(event.side, event.delta > 0); break;
       case 'heal': this.arrows(event.side, true); break;
@@ -784,6 +790,73 @@ export class WorldScene {
     fx.offZ = 0;
   }
 
+  private shakeAmount = 0;
+
+  /** 맞았을 때: 피해 숫자가 떠오르고, 불꽃이 튀고, 화면이 흔들린다 */
+  private impact(side: 0 | 1, amount: number, effectiveness: number, critical: boolean) {
+    const engaged = this.engaged;
+    if (!engaged) return;
+    const x = side === 0 ? this.allyPos.x : engaged.state.x;
+    const z = side === 0 ? this.allyPos.z : engaged.state.z;
+    const strong = effectiveness > 1;
+    const weak = effectiveness < 1;
+    const color = critical ? '#ffd23f' : strong ? '#ff5a3c' : weak ? '#9fb3c8' : '#ffffff';
+    this.floatText(x, MODEL_HEIGHT * WILD_SCALE + 0.3, z, `-${amount}`, color, 1.4 + Math.min(1, amount / 60) * 0.8);
+    const note = critical ? '급소!' : strong ? '효과 굉장!' : weak ? '별로…' : '';
+    if (note) setTimeout(() => this.floatText(x, MODEL_HEIGHT * WILD_SCALE + 1.0, z, note, color, 1), 120);
+    this.sparks(x, 1.0, z, color);
+    this.shakeAmount = Math.max(this.shakeAmount, critical || strong ? 0.35 : 0.18);
+  }
+
+  private floatText(x: number, y: number, z: number, text: string, color: string, size: number) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 96;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.font = 'bold 64px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = '#1b1f24';
+    ctx.strokeText(text, 128, 50);
+    ctx.fillStyle = color;
+    ctx.fillText(text, 128, 50);
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
+    const sprite = new THREE.Sprite(material);
+    sprite.renderOrder = 20;
+    sprite.position.set(x, y, z);
+    this.scene.add(sprite);
+    void this.tween(1.0, (p) => {
+      const pop = p < 0.15 ? p / 0.15 : 1;
+      sprite.scale.set(size * 2.2 * (0.6 + 0.4 * pop), size * 0.825 * (0.6 + 0.4 * pop), 1);
+      sprite.position.y = y + p * 1.2;
+      material.opacity = p < 0.7 ? 1 : 1 - (p - 0.7) / 0.3;
+    }).then(() => { this.scene.remove(sprite); texture.dispose(); material.dispose(); });
+  }
+
+  private sparks(x: number, y: number, z: number, color: string) {
+    const geo = new THREE.SphereGeometry(0.08, 6, 5);
+    const material = new THREE.MeshBasicMaterial({ color, transparent: true });
+    const parts: { mesh: THREE.Mesh; vx: number; vy: number; vz: number }[] = [];
+    for (let i = 0; i < 12; i += 1) {
+      const mesh = new THREE.Mesh(geo, material);
+      mesh.position.set(x, y, z);
+      const a = (i / 12) * Math.PI * 2 + Math.random() * 0.5;
+      const v = 2 + Math.random() * 2.5;
+      parts.push({ mesh, vx: Math.cos(a) * v, vy: 1.5 + Math.random() * 2.5, vz: Math.sin(a) * v });
+      this.scene.add(mesh);
+    }
+    void this.tween(0.55, (p) => {
+      for (const q of parts) {
+        q.mesh.position.set(x + q.vx * p * 0.5, y + q.vy * p * 0.5 - 3 * p * p * 0.5, z + q.vz * p * 0.5);
+        q.mesh.scale.setScalar(1 - p);
+      }
+      material.opacity = 1 - p;
+    }).then(() => { for (const q of parts) this.scene.remove(q.mesh); geo.dispose(); material.dispose(); });
+  }
+
   private hit(fx: Fx) {
     fx.blink = 0.5;
     void this.tween(0.45, (p) => { fx.shake = 0.14 * (1 - p); });
@@ -1071,6 +1144,11 @@ export class WorldScene {
       const cy = Math.cos(this.camYaw);
       goal = new THREE.Vector3(this.playerPos.x + sy * 8.5, 6.8, this.playerPos.z + cy * 8.5);
       focus = new THREE.Vector3(this.playerPos.x - sy * 2.5, 1.1, this.playerPos.z - cy * 2.5);
+    }
+    if (this.shakeAmount > 0.001) {
+      goal.x += (Math.random() - 0.5) * this.shakeAmount;
+      goal.y += (Math.random() - 0.5) * this.shakeAmount;
+      this.shakeAmount *= Math.exp(-9 * dt);
     }
     this.camera.position.lerp(goal, k);
     this.look.lerp(focus, k);

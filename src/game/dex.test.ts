@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newSave, parseSave } from '../world/save.ts';
 import { decideSync, withMergedDex } from '../online/saveSync.ts';
-import { cleanDex, dexFromOwned, dexProgress, dexStatus, emptyDex, markCaught, markSeen, mergeDex } from './dex.ts';
+import { dexMilestoneReward, cleanDex, dexFromOwned, dexProgress, dexStatus, emptyDex, markCaught, markSeen, mergeDex } from './dex.ts';
 
 describe('도감 기록', () => {
   it('만난 종은 번호순으로 한 번만 들어가고, 같으면 같은 객체를 돌려준다', () => {
@@ -68,5 +68,13 @@ describe('서식 구역', () => {
     expect(habitatsOf({ types: ['fire'] })).toEqual(['화산', '사막']);
     expect(habitatsOf({ types: ['ice', 'water'] })[0]).toBe('설원');
     expect(habitatsOf({ types: ['electric'] })).toEqual([]);
+  });
+});
+
+describe('도감 보상', () => {
+  it('5종마다 보상, 넘어가지 않으면 없음', () => {
+    expect(dexMilestoneReward(3, 4)).toBeNull();
+    expect(dexMilestoneReward(4, 5)).toEqual({ steps: 1, coins: 150, ropes: 3, sturdy: 1 });
+    expect(dexMilestoneReward(4, 10)?.steps).toBe(2);
   });
 });
