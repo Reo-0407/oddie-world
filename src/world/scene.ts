@@ -23,14 +23,15 @@ import { MODEL_SPECIES_IDS, wildLevel } from './spawns.ts';
 import { stepChase, stepWander, type WanderState } from './wander.ts';
 
 const AREA_HALF = MAP_HALF; // 맵 한 변(120)의 절반
-const WILD_COUNT = 15; // 동시에 있는 야생 오디 최대 수
-const SPAWN_MIN = 14; // 플레이어 주변 이 거리 안쪽에는 새로 나타나지 않는다
-const SPAWN_MAX = 40;
+const WILD_COUNT = 26; // 동시에 있는 야생 오디 최대 수
+const SPAWN_MIN = 9; // 플레이어 주변 이 거리 안쪽에는 새로 나타나지 않는다
+const SPAWN_MAX = 34;
 const DESPAWN_DIST = 56; // 이보다 멀어지면 사라지고 플레이어 주변에 다시 나타난다
 const FAR_SKIP = 38; // 이보다 먼 오디는 움직임 계산을 건너뛴다(안개 속이라 안 보인다)
 const PLAYER_SPEED = 4;
 const RESPAWN_SECONDS = 10;
 const GRACE_SECONDS = 3; // 전투에서 돌아온 직후엔 자동 결투를 잠시 막는다
+const WILD_SCALE = 1.6; // 필드에서 야생 오디를 크게 보여 준다
 const AGGRESSIVE_RATE = 0.4; // 이 비율의 야생 오디만 먼저 다가온다
 const FIELD_RANGE = 8; // 필드 로프/출동 가능 거리
 const BATTLE_GAP = 3.6;
@@ -232,7 +233,7 @@ export class WorldScene {
       const holder = new THREE.Group();
       const pivot = new THREE.Group();
       const marker = new THREE.Mesh(markerGeo, markerMat);
-      marker.position.y = MODEL_HEIGHT + 0.7;
+      marker.position.y = MODEL_HEIGHT * WILD_SCALE + 1.5;
       marker.rotation.x = Math.PI;
       holder.add(pivot, marker);
       this.scene.add(holder);
@@ -242,7 +243,7 @@ export class WorldScene {
         holder, pivot, marker, alive: true, frozen: false, respawnAt: 0,
         phase: Math.random() * 6.28, token: 0, fx: newFx(),
       };
-      this.rollWild(wild);
+      this.rollWild(wild, i < 8);
       this.wilds.push(wild);
     }
 
@@ -252,8 +253,8 @@ export class WorldScene {
     this.observer = new ResizeObserver(this.resize);
     this.observer.observe(container);
     this.resize();
-    this.camera.position.set(this.playerPos.x, 5.5, this.playerPos.z + 7);
-    this.look.set(this.playerPos.x, 1, this.playerPos.z);
+    this.camera.position.set(this.playerPos.x, 6.8, this.playerPos.z + 8.5);
+    this.look.set(this.playerPos.x, 1.1, this.playerPos.z - 2.5);
     this.frame = requestAnimationFrame(this.tick);
   }
 
@@ -575,6 +576,29 @@ export class WorldScene {
     }
   }
 
+  private makeLabel(text: string): THREE.Sprite {
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = 'rgba(20,24,30,0.72)';
+      ctx.beginPath();
+      ctx.roundRect(2, 6, 316, 52, 26);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 30px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 160, 33);
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
+    sprite.scale.set(3.6, 0.72, 1);
+    sprite.renderOrder = 10;
+    return sprite;
+  }
+
   private makeSign(text: string): THREE.Sprite {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
@@ -603,24 +627,33 @@ export class WorldScene {
 
   private dress(wild: Wild, speciesId = wild.speciesId) {
     wild.pivot.clear();
+    for (const old of wild.holder.children.filter((c) => c.name === 'label')) {
+      wild.holder.remove(old);
+      disposeObject(old);
+    }
     const token = (wild.token += 1);
     void this.models.create(speciesId).then((object) => {
       if (this.disposed || wild.token !== token) return;
+      object.scale.multiplyScalar(WILD_SCALE);
       wild.pivot.add(object);
+      const label = this.makeLabel(`${speciesById(speciesId).name} Lv.${wild.level}`);
+      label.name = 'label';
+      label.position.y = MODEL_HEIGHT * WILD_SCALE + 0.55;
+      wild.holder.add(label);
     });
   }
 
-  private rollWild(wild: Wild) {
+  private rollWild(wild: Wild, near = false) {
     // 플레이어 주변(SPAWN_MIN~SPAWN_MAX)에서만 나타난다. 마을과 맵 밖은 피한다
     let x = this.playerPos.x;
     let z = this.playerPos.z;
     for (let tries = 0; tries < 12; tries += 1) {
       const angle = Math.random() * Math.PI * 2;
-      const radius = SPAWN_MIN + Math.random() * (SPAWN_MAX - SPAWN_MIN);
+      const radius = near ? 6 + Math.random() * 10 : SPAWN_MIN + Math.random() * (SPAWN_MAX - SPAWN_MIN);
       const spot = clampToMap({ x: this.playerPos.x + Math.sin(angle) * radius, z: this.playerPos.z + Math.cos(angle) * radius });
       x = spot.x;
       z = spot.z;
-      if (distance(spot, TOWN) >= TOWN_RADIUS + 2 && distance(spot, this.playerPos) >= SPAWN_MIN * 0.7) break;
+      if (distance(spot, TOWN) >= TOWN_RADIUS + 2 && distance(spot, this.playerPos) >= (near ? 5 : SPAWN_MIN * 0.7)) break;
     }
     wild.speciesId = pickSpeciesForRegion(regionAt(x, z), SPAWN_CANDIDATES, Math.random);
     wild.level = wildLevel(highestLevel(this.getData().team, 10), Math.random);
@@ -1003,8 +1036,8 @@ export class WorldScene {
       const focusDist = height / Math.tan(below + 0.21);
       focus = new THREE.Vector3(goal.x - sideX * focusDist, 0, goal.z - sideZ * focusDist);
     } else {
-      goal = new THREE.Vector3(this.playerPos.x, 5.5, this.playerPos.z + 7);
-      focus = new THREE.Vector3(this.playerPos.x, 1, this.playerPos.z);
+      goal = new THREE.Vector3(this.playerPos.x, 6.8, this.playerPos.z + 8.5);
+      focus = new THREE.Vector3(this.playerPos.x, 1.1, this.playerPos.z - 2.5);
     }
     this.camera.position.lerp(goal, k);
     this.look.lerp(focus, k);
