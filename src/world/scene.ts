@@ -15,7 +15,7 @@ import {
 import { pixelRatioFor } from './device.ts';
 import { MODEL_HEIGHT, OddieModels } from './oddieModels.ts';
 import {
-  blendHex, clampToMap, MAP_HALF, pickSpeciesForRegion, REGIONS, regionAt, regionWeights, START_POS, TOWN_POS,
+  blendHex, clampToMap, MAP_HALF, pickSpeciesForRegion, REGION_IDS, REGIONS, regionAt, regionWeights, START_POS, TOWN_POS,
   type RegionId, type SpawnCandidate,
 } from './regions.ts';
 import type { Ropes } from './save.ts';
@@ -32,6 +32,11 @@ const PLAYER_SPEED = 4;
 const RESPAWN_SECONDS = 10;
 const GRACE_SECONDS = 3; // 전투에서 돌아온 직후엔 자동 결투를 잠시 막는다
 const WILD_SCALE = 1.6; // 필드에서 야생 오디를 크게 보여 준다
+const BOSS_SCALE = 2.3;
+const BOSS_RESPAWN_SECONDS = 240;
+const BOSS_HOME: Record<RegionId, Vec2> = {
+  meadow: { x: -42, z: -44 }, desert: { x: 40, z: -40 }, snow: { x: -40, z: 42 }, volcano: { x: 42, z: 42 },
+};
 const AGGRESSIVE_RATE = 0.4; // 이 비율의 야생 오디만 먼저 다가온다
 const FIELD_RANGE = 8; // 필드 로프/출동 가능 거리
 const BATTLE_GAP = 4.4;
@@ -104,6 +109,9 @@ interface Wild {
   alive: boolean;
   frozen: boolean;
   respawnAt: number;
+  /** 구역 우두머리면 그 구역, 지키는 자리(home) 근처에서만 움직인다 */
+  boss: RegionId | null;
+  home: Vec2 | null;
   phase: number;
   token: number;
   fx: Fx;
@@ -243,7 +251,7 @@ export class WorldScene {
       const wild: Wild = {
         key: i, speciesId: 1, level: 1, hpRatio: 1, status: null, aggressive: false,
         state: { x: 0, z: 0, heading: 0, mode: 'idle', timer: 1 },
-        holder, pivot, marker, alive: true, frozen: false, respawnAt: 0,
+        holder, pivot, marker, alive: true, frozen: false, respawnAt: 0, boss: null, home: null,
         phase: Math.random() * 6.28, token: 0, fx: newFx(),
       };
       this.rollWild(wild, i < 8);
@@ -255,6 +263,24 @@ export class WorldScene {
     dom.addEventListener('pointermove', this.onDragMove);
     dom.addEventListener('pointerup', this.onDragEnd);
     dom.addEventListener('pointercancel', this.onDragEnd);
+    for (const region of REGION_IDS) {
+      const holder = new THREE.Group();
+      const pivot = new THREE.Group();
+      const marker = new THREE.Mesh(markerGeo, markerMat);
+      marker.visible = false;
+      holder.add(pivot, marker);
+      this.scene.add(holder);
+      const home = BOSS_HOME[region];
+      const boss: Wild = {
+        key: this.wilds.length, speciesId: 1, level: 1, hpRatio: 1, status: null, aggressive: false,
+        state: { x: home.x, z: home.z, heading: 0, mode: 'idle', timer: 1 },
+        holder, pivot, marker, alive: true, frozen: false, respawnAt: 0, boss: region, home,
+        phase: Math.random() * 6.28, token: 0, fx: newFx(),
+      };
+      this.rollBoss(boss);
+      this.wilds.push(boss);
+    }
+
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onBlur);
@@ -653,17 +679,42 @@ export class WorldScene {
     const token = (wild.token += 1);
     void this.models.create(speciesId).then((object) => {
       if (this.disposed || wild.token !== token) return;
-      object.scale.multiplyScalar(WILD_SCALE);
+      const scale = wild.boss ? BOSS_SCALE : WILD_SCALE;
+      object.scale.multiplyScalar(scale);
       wild.pivot.add(object);
-      const label = this.makeLabel(`${speciesById(speciesId).name} Lv.${wild.level}`);
+      const label = this.makeLabel(`${wild.boss ? '우두머리 ' : ''}${speciesById(speciesId).name} Lv.${wild.level}`);
       label.name = 'label';
       label.visible = this.engaged !== wild;
-      label.position.y = MODEL_HEIGHT * WILD_SCALE + 0.55;
+      label.position.y = MODEL_HEIGHT * scale + 0.55;
       wild.holder.add(label);
     });
   }
 
+  private rollBoss(wild: Wild) {
+    const region = wild.boss;
+    if (!region) return;
+    const pool = SPAWN_CANDIDATES.filter((c) => {
+      const rarity = speciesById(c.id).rarity;
+      return (rarity === 'Epic' || rarity === 'Legendary') && c.types.some((t) => (REGIONS[region].typeWeights[t] ?? 0) > 1);
+    });
+    const candidates = pool.length > 0 ? pool : SPAWN_CANDIDATES;
+    wild.speciesId = candidates[Math.floor(Math.random() * candidates.length)].id;
+    wild.level = highestLevel(this.getData().team, 10) + 5;
+    wild.hpRatio = 1;
+    wild.status = null;
+    wild.aggressive = false;
+    wild.marker.visible = false;
+    wild.alive = true;
+    wild.frozen = false;
+    wild.fx = newFx();
+    wild.holder.visible = true;
+    const home = wild.home ?? BOSS_HOME[region];
+    wild.state = { x: home.x, z: home.z, heading: Math.random() * 6.28, mode: 'idle', timer: Math.random() * 2 };
+    this.dress(wild);
+  }
+
   private rollWild(wild: Wild, near = false) {
+    if (wild.boss) { this.rollBoss(wild); return; }
     // 플레이어 주변(SPAWN_MIN~SPAWN_MAX)에서만 나타난다. 마을과 맵 밖은 피한다
     let x = this.playerPos.x;
     let z = this.playerPos.z;
@@ -692,7 +743,7 @@ export class WorldScene {
   private vanish(wild: Wild) {
     wild.alive = false;
     wild.holder.visible = false;
-    wild.respawnAt = this.clock + RESPAWN_SECONDS;
+    wild.respawnAt = this.clock + (wild.boss ? BOSS_RESPAWN_SECONDS : RESPAWN_SECONDS);
     if (this.duelTarget === wild) this.duelTarget = null;
     if (this.fieldTarget === wild) this.fieldTarget = null;
   }
@@ -1057,13 +1108,18 @@ export class WorldScene {
       }
       const dist = distance(wild.state, this.playerPos);
       const isEngaged = wild === this.engaged;
-      if (!isEngaged && !wild.frozen && this.mode === 'explore' && dist > DESPAWN_DIST) {
+      if (!wild.boss && !isEngaged && !wild.frozen && this.mode === 'explore' && dist > DESPAWN_DIST) {
         this.rollWild(wild); // 너무 멀어진 오디는 플레이어 근처에 새로 나타난다
         continue;
       }
       if (!isEngaged && !wild.frozen && dist > FAR_SKIP) continue; // 먼 오디는 움직임 계산을 건너뛴다
       if (!isEngaged && !wild.frozen) {
-        if (exploring && wild.aggressive && this.grace <= 0 && dist <= NOTICE_RANGE) {
+        if (wild.boss) {
+          const stepped = stepWander(wild.state, dt, Math.random, AREA_HALF);
+          const h = wild.home ?? stepped;
+          const d = distance(stepped, h);
+          wild.state = d > 4 ? { ...stepped, x: h.x + (stepped.x - h.x) * 4 / d, z: h.z + (stepped.z - h.z) * 4 / d } : stepped;
+        } else if (exploring && wild.aggressive && this.grace <= 0 && dist <= NOTICE_RANGE) {
           wild.state = stepChase(wild.state, this.playerPos, dt, DUEL_RANGE * 0.6);
         } else {
           wild.state = stepWander(wild.state, dt, Math.random, AREA_HALF);
