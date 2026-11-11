@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAPS } from './maps/index.ts';
-import { canStep, facingTile, interactTarget, npcInSight, rollWild, stepPlayer, tileAt, mapWidth, type PlayerState } from './world.ts';
+import { rollWild } from './encounters.ts';
+import { canStep, facingTile, interactTarget, npcInSight, stepPlayer, tileAt, mapWidth, type PlayerState } from './world.ts';
 import { isGrass, isWalkable } from './tiles.ts';
 
 const town = MAPS.town;

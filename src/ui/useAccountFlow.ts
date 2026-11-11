@@ -3,7 +3,7 @@ import { currentAccount, signOutAccount, type Account } from '../online/accountC
 import { deleteCloudSave, fetchCloudSave, uploadCloudSave } from '../online/cloudSave.ts';
 import { decideSync, withMergedDex, type SaveSide } from '../online/saveSync.ts';
 import {
-  clearLocalAccountData, clearSave, loadOwner, loadSave, loadSaveAt, setOwner, writeSave, type SaveData,
+  clearLocalAccountData, clearSave, loadOwner, loadSave, loadSaveAt, newSave, setOwner, writeSave, type SaveData,
 } from '../game/save.ts';
 
 const GUEST_KEY = 'oddie-guest';
@@ -166,6 +166,14 @@ export function useAccountFlow() {
     setPhase('ready');
   }, [syncAfterLogin]);
 
+  /** 가입 직후: 계정에 저장이 없으면 고른 캐릭터로 새 저장을 만든다(게스트 저장이 있으면 그대로 이어 간다) */
+  const signup = useCallback(async (who: Account, characterIndex: number) => {
+    await syncAfterLogin(who);
+    if (!loadSave()) update(newSave(who.username, characterIndex));
+    setAuthCancelable(false);
+    setPhase('ready');
+  }, [syncAfterLogin, update]);
+
   const guest = useCallback(() => {
     setGuestFlag(true);
     setOwner('guest');
@@ -206,5 +214,5 @@ export function useAccountFlow() {
     setConflict(null);
   }, [scheduleUpload]);
 
-  return { phase, account, data, conflict, authCancelable, update, restart, login, guest, openAuth, cancelAuth, logout, resolveConflict };
+  return { phase, account, data, conflict, authCancelable, update, restart, login, signup, guest, openAuth, cancelAuth, logout, resolveConflict };
 }

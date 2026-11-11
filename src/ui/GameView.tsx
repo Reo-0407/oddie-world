@@ -6,10 +6,12 @@ import { createRenderer, type Actor } from '../overworld/render.ts';
 import { PLAYER_LOOKS } from '../overworld/sprites.ts';
 import { TILE } from '../overworld/tiles.ts';
 import {
-  DELTA, STEP_MS, canStep, interactTarget, npcInSight, rollWild, stepPlayer, type Dir, type PlayerState,
+  DELTA, STEP_MS, canStep, interactTarget, npcInSight, stepPlayer, type Dir, type PlayerState,
 } from '../overworld/world.ts';
+import { rollWild } from '../overworld/encounters.ts';
 import type { RegionId } from '../world/regions.ts';
 import { Dialog, type DialogControl } from './Dialog.tsx';
+import { GameMenu, type MenuActions } from './GameMenu.tsx';
 
 export interface EncounterInfo { speciesId: number; level: number; region: RegionId }
 
@@ -18,6 +20,10 @@ interface Props {
   onData(next: SaveData): void;
   onEncounter(info: EncounterInfo): void;
   onTrainer(npcId: string): void;
+  /** 처음 그릴 때 보여 줄 대화(전투 결과 등) */
+  message?: { speaker?: string; pages: string[] } | null;
+  /** 둥근 메뉴 버튼 안의 항목들 */
+  menu: MenuActions;
 }
 
 interface NpcRt extends Npc {
@@ -45,7 +51,7 @@ const FLASH_MS = 380;
 const cloneNpcs = (map: MapData): NpcRt[] => map.npcs.map((n) => ({ ...n, anim: null, bubble: false }));
 
 /** 위에서 내려다보는 2D 월드: 캔버스 + 키보드/터치 조작 + 대화 상자 */
-export function GameView({ data, onData, onEncounter, onTrainer }: Props) {
+export function GameView({ data, onData, onEncounter, onTrainer, message, menu }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const control = useRef<DialogControl | null>(null);
@@ -55,6 +61,10 @@ export function GameView({ data, onData, onEncounter, onTrainer }: Props) {
   cb.current = { onData, onEncounter, onTrainer };
   const [dialog, setDialog] = useState<DialogSpec | null>(null);
   const [mapName, setMapName] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(false);
+  menuRef.current = menuOpen;
+  const firstMessage = useRef(message);
   const api = useRef<{ press(d: Dir): void; release(d: Dir): void; a(): void } | null>(null);
 
   useEffect(() => {
@@ -143,7 +153,7 @@ export function GameView({ data, onData, onEncounter, onTrainer }: Props) {
       });
     };
 
-    const idle = () => !rt.anim && !rt.fade && !rt.flash && !rt.ev && !rt.dialogOpen;
+    const idle = () => !rt.anim && !rt.fade && !rt.flash && !rt.ev && !rt.dialogOpen && !menuRef.current;
 
     const pressA = () => {
       if (rt.dialogOpen) return control.current?.press();
@@ -245,7 +255,7 @@ export function GameView({ data, onData, onEncounter, onTrainer }: Props) {
         if (rt.anim.t >= STEP_MS) finishStep();
       } else if (rt.ev) {
         updateEvent(dt);
-      } else if (!rt.dialogOpen) {
+      } else if (!rt.dialogOpen && !menuRef.current) {
         rt.cooldown = Math.max(0, rt.cooldown - dt);
         const dir = rt.held[rt.held.length - 1];
         if (dir && rt.cooldown === 0) tryStep(dir);
@@ -269,6 +279,7 @@ export function GameView({ data, onData, onEncounter, onTrainer }: Props) {
       });
     };
     raf = requestAnimationFrame(loop);
+    if (firstMessage.current) openDialog({ ...firstMessage.current, after: finish() });
 
     const press = (d: Dir) => {
       if (rt.dialogOpen) { if (d === 'up' || d === 'down') control.current?.move(d); return; }
@@ -292,6 +303,9 @@ export function GameView({ data, onData, onEncounter, onTrainer }: Props) {
         if (!e.repeat) pressA();
       } else if (B_KEYS.has(e.code)) {
         e.preventDefault();
+        if (e.repeat || rt.dialogOpen) return;
+        if (menuRef.current) setMenuOpen(false);
+        else if (idle()) { rt.held = []; setMenuOpen(true); }
       }
     };
     const onKeyUp = (e: KeyboardEvent) => { const dir = KEY_DIR[e.code]; if (dir) release(dir); };
@@ -313,7 +327,7 @@ export function GameView({ data, onData, onEncounter, onTrainer }: Props) {
   const dpad = (dir: Dir, label: string, cls: string) => (
     <button
       type="button" className={`gv-btn ${cls}`} aria-label={label}
-      onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); api.current?.press(dir); }}
+      onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); api.current?.press(dir); }}
       onPointerUp={() => api.current?.release(dir)}
       onPointerCancel={() => api.current?.release(dir)}
       onLostPointerCapture={() => api.current?.release(dir)}
@@ -323,7 +337,7 @@ export function GameView({ data, onData, onEncounter, onTrainer }: Props) {
 
   return (
     <div className="gv" ref={wrapRef} onContextMenu={(e) => e.preventDefault()}>
-      <canvas ref={canvasRef} className="gv-canvas" />
+      <canvas ref={canvasRef} className="gv-canvas" onPointerDown={(e) => { e.preventDefault(); api.current?.a(); }} />
       <div className="gv-title">{mapName}</div>
       {dialog && (
         <Dialog
@@ -334,10 +348,12 @@ export function GameView({ data, onData, onEncounter, onTrainer }: Props) {
       <div className="gv-pad" aria-label="십자키">
         {dpad('up', '▲', 'up')}{dpad('left', '◀', 'left')}{dpad('right', '▶', 'right')}{dpad('down', '▼', 'down')}
       </div>
-      <div className="gv-ab">
-        <button type="button" className="gv-btn gv-b" aria-label="B" onPointerDown={(e) => e.preventDefault()}>B</button>
-        <button type="button" className="gv-btn gv-a" aria-label="A" onPointerDown={(e) => { e.preventDefault(); api.current?.a(); }}>A</button>
-      </div>
+      {!dialog && !menuOpen && (
+        <button type="button" className="gv-menu-btn" aria-label="메뉴" onPointerDown={(e) => e.stopPropagation()} onClick={() => setMenuOpen(true)}>
+          <span />
+        </button>
+      )}
+      {menuOpen && <GameMenu data={data} actions={menu} onClose={() => setMenuOpen(false)} />}
     </div>
   );
 }

@@ -145,7 +145,7 @@ footer {
 .world {
   position: relative;
   width: 100%;
-  height: calc(100dvh - 120px);
+  height: 100dvh;
   min-height: 280px;
   overflow: hidden;
   touch-action: none;
@@ -419,9 +419,9 @@ footer {
   position: relative;
   width: 100%;
   max-width: 960px;
-  height: calc(100dvh - 120px);
+  height: 100dvh;
   min-height: 320px;
-  max-height: 720px;
+  max-height: none;
   margin: 0 auto;
   background: #10141a;
   overflow: hidden;
@@ -452,7 +452,6 @@ footer {
   position: absolute; left: 12px; bottom: 12px; width: 156px; height: 156px; z-index: 3;
   display: none; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 2px; touch-action: none;
 }
-.gv-ab { position: absolute; right: 12px; bottom: 16px; z-index: 3; display: none; gap: 14px; align-items: flex-end; touch-action: none; }
 .gv-btn {
   touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
   min-height: 0; padding: 0; border: 3px solid #23262b; background: rgba(255, 255, 255, 0.78); color: #23262b;
@@ -463,10 +462,42 @@ footer {
 .gv-pad .left { grid-column: 1; grid-row: 2; border-radius: 10px 0 0 10px; }
 .gv-pad .right { grid-column: 3; grid-row: 2; border-radius: 0 10px 10px 0; }
 .gv-pad .down { grid-column: 2; grid-row: 3; border-radius: 0 0 10px 10px; }
-.gv-a, .gv-b { width: 64px; height: 64px; border-radius: 50%; }
-.gv-a { background: rgba(217, 79, 61, 0.85); color: #fff; margin-bottom: 28px; }
 @media (hover: none), (max-width: 760px) {
   .gv-pad { display: grid; }
-  .gv-ab { display: flex; }
   .dialog { bottom: 180px; }
 }
+
+/* ---------- 포켓몬 고식 메뉴 ---------- */
+.gv-menu-btn {
+  position: absolute; left: 50%; bottom: 14px; z-index: 4; width: 64px; height: 64px; min-height: 0; padding: 0; transform: translateX(-50%);
+  border-radius: 50%; border: 3px solid #23262b; overflow: hidden; touch-action: none;
+  background: linear-gradient(#e8443a 0 46%, #23262b 46% 54%, #fafafa 54% 100%); box-shadow: 0 4px 10px rgba(0,0,0,.45);
+}
+.gv-menu-btn span { position: absolute; left: 50%; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; background: #fafafa; border: 3px solid #23262b; }
+.gv-menu-btn:active { transform: translateX(-50%) scale(0.94); }
+.gm { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; background: rgba(250, 250, 250, 0.94); touch-action: pan-y; overflow-y: auto; }
+.gm-body { width: min(420px, 100%); display: flex; flex-direction: column; gap: 10px; }
+.gm-body h2 { margin: 0; text-align: center; }
+.gm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px 8px; }
+.gm-item { display: flex; flex-direction: column; align-items: center; gap: 6px; border: 0; background: none; font-weight: 800; min-height: 48px; }
+.gm-icon { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 50%; color: #fff; font-size: 1.8rem; box-shadow: 0 4px 8px rgba(0,0,0,.3); border: 3px solid #fff; }
+.gm-item:active .gm-icon { transform: scale(0.94); }
+.gm-close { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); width: 64px; height: 64px; border-radius: 50%; border: 3px solid #23262b; background: #fff; font-size: 1.6rem; font-weight: 800; box-shadow: 0 4px 10px rgba(0,0,0,.3); }
+.gm-team { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.gm-mon { display: flex; flex-direction: column; align-items: center; padding: 6px; border-radius: 12px; background: #fff; border: 2px solid #23262b; font-size: 0.85rem; }
+.gm-bag { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.gm-bag li { display: flex; justify-content: space-between; padding: 10px 14px; border-radius: 12px; background: #fff; border: 2px solid #23262b; }
+.gm-credit { margin: 0; font-size: 0.8rem; text-align: center; opacity: 0.7; }
+.gm-danger { background: #e0523f; color: #fff; }
+.gm .panel-overlay { position: fixed; }
+
+/* ---------- 로그인 / 가입 ---------- */
+.pin-dots { display: flex; gap: 14px; justify-content: center; margin: 6px 0; }
+.pin-dots i { width: 18px; height: 18px; border-radius: 50%; border: 3px solid #23262b; }
+.pin-dots i.on { background: #23262b; }
+.pin-pad { display: grid; grid-template-columns: repeat(3, 72px); gap: 10px; justify-content: center; }
+.pin-pad button { height: 60px; min-height: 48px; border-radius: 30px; font-size: 1.4rem; font-weight: 800; }
+.look-pick { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.look-pick button { padding: 4px; min-height: 48px; border-radius: 10px; display: grid; place-items: center; }
+.look-pick button.selected { background: #fff3c4; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.look-preview { display: block; margin: 0 auto; image-rendering: pixelated; border-radius: 12px; background: #7bbf5a; }

@@ -30,6 +30,12 @@ export function validatePassword(password: string): FieldCheck {
   return { ok: true };
 }
 
+export const PIN_LENGTH = 4;
+/** 로그인 비밀번호 대신 쓰는 숫자 4자리 */
+export function validatePin(pin: string): FieldCheck {
+  return /^\d{4}$/.test(pin) ? { ok: true } : { ok: false, message: `PIN은 숫자 ${PIN_LENGTH}자리예요.` };
+}
+
 /** 같은 아이디로 보는 기준: 영문은 대소문자를 구분하지 않는다 */
 export function canonicalUsername(raw: string): string {
   return raw.trim().toLowerCase();

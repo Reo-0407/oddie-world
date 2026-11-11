@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { clearLocalAccountData, loadOwner, loadSaveAt, newSave, SAVE_KEY, setOwner, writeSave } from '../game/save.ts';
 import {
-  authErrorMessage, canonicalUsername, emailToUsername, FAKE_EMAIL_DOMAIN, usernameToEmail, validatePassword, validateUsername,
+  authErrorMessage, canonicalUsername, emailToUsername, FAKE_EMAIL_DOMAIN, usernameToEmail, validatePassword, validatePin, validateUsername,
 } from './account.ts';
+import { pinToPassword } from './accountClient.ts';
 import { decideSync, describeSave, MAX_SAVE_BYTES, parseCloudData, saveBytes, withinSizeLimit } from './saveSync.ts';
 
 const store = () => {
@@ -29,6 +30,18 @@ describe('아이디 검사', () => {
     expect(validatePassword('12345').ok).toBe(false);
     expect(validatePassword('123456').ok).toBe(true);
     expect(validatePassword('가'.repeat(73)).ok).toBe(false);
+  });
+});
+
+describe('PIN', () => {
+  it('숫자 정확히 4자리만', () => {
+    for (const ok of ['0000', '1234', '9876']) expect(validatePin(ok).ok, ok).toBe(true);
+    for (const bad of ['', '123', '12345', '12a4', ' 123', '１２３４', '12.3']) expect(validatePin(bad).ok, bad).toBe(false);
+  });
+  it('보내는 비밀번호는 PIN에서 만들고, 비밀번호 길이 규칙을 통과한다', () => {
+    expect(pinToPassword('0420')).toBe('oddie-pin-0420');
+    expect(pinToPassword('1234')).not.toBe(pinToPassword('4321'));
+    expect(validatePassword(pinToPassword('0000')).ok).toBe(true);
   });
 });
 

@@ -1,5 +1,3 @@
-import { SPECIES } from '../data/index.ts';
-import { pickSpeciesForRegion, type RegionId } from '../world/regions.ts';
 import { isCounter, isGrass, isWalkable, parseRows, type Tile } from './tiles.ts';
 import type { Dir, MapData, Npc, Sign } from './maps/types.ts';
 
@@ -98,15 +96,4 @@ export function interactTarget(map: MapData, npcs: readonly Npc[], s: PlayerStat
     if (beyond) return { type: 'npc', npc: beyond };
   }
   return null;
-}
-
-// ---------- 야생 ----------
-export const WILD_LEVELS: Record<RegionId, [number, number]> = {
-  meadow: [3, 6], desert: [10, 14], snow: [17, 22], volcano: [25, 30],
-};
-const CANDIDATES = SPECIES.map((s) => ({ id: s.id, types: s.types }));
-
-export function rollWild(region: RegionId, rand: () => number): { speciesId: number; level: number; region: RegionId } {
-  const [lo, hi] = WILD_LEVELS[region];
-  return { speciesId: pickSpeciesForRegion(region, CANDIDATES, rand), level: lo + Math.floor(rand() * (hi - lo + 1)), region };
 }

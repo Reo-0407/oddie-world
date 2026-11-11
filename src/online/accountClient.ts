@@ -1,6 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 import {
-  authErrorMessage, emailToUsername, usernameToEmail, validatePassword, validateUsername,
+  authErrorMessage, emailToUsername, usernameToEmail, validatePassword, validatePin, validateUsername,
 } from './account.ts';
 import { getSupabase } from './supabaseTransport.ts';
 
@@ -83,4 +83,17 @@ export async function signOutAccount(): Promise<void> {
   } catch {
     // 인터넷이 없어도 이 기기에서는 로그아웃된 것으로 본다
   }
+}
+
+/** Supabase는 비밀번호가 6자 이상이어야 해서 4자리 PIN을 이 글자로 바꿔 보낸다(바꾸는 곳은 여기 하나) */
+export const pinToPassword = (pin: string) => `oddie-pin-${pin}`;
+
+export async function signUpWithPin(username: string, pin: string): Promise<AuthResult> {
+  const check = validatePin(pin);
+  return check.ok ? signUpWithId(username, pinToPassword(pin)) : { ok: false, message: check.message };
+}
+
+export async function signInWithPin(username: string, pin: string): Promise<AuthResult> {
+  const check = validatePin(pin);
+  return check.ok ? signInWithId(username, pinToPassword(pin)) : { ok: false, message: check.message };
 }
