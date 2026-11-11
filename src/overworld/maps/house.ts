@@ -1,4 +1,4 @@
-import type { RegionId } from '../../world/regions.ts';
+import type { RegionId } from '../regions.ts';
 import type { Dir, MapData, Npc, NpcLook } from './types.ts';
 import { fill, grid, put, rows } from './util.ts';
 

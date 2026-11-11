@@ -3,7 +3,7 @@ import { MOVES, SPECIES } from '../data/index.ts';
 import type { Rarity, Species } from '../data/types.ts';
 import type { StatKey, TypeName } from '../engine/types.ts';
 import { dexProgress, dexStatus, type Dex } from '../game/dex.ts';
-import { REGION_IDS, REGIONS, speciesWeight } from '../world/regions.ts';
+import { REGION_IDS, REGIONS, speciesWeight } from '../overworld/regions.ts';
 import { moveDetail } from './moveText.ts';
 import { OddieArt, typeColor } from './OddieArt.tsx';
 

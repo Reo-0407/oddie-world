@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SPECIES, speciesById } from '../data/index.ts';
-import { REGIONS } from '../world/regions.ts';
+import { REGIONS } from './regions.ts';
 import { route1 } from './maps/route1.ts';
 import { TRAINERS, WILD_LEVELS, rollWild } from './encounters.ts';
 

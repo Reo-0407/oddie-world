@@ -6,7 +6,7 @@ import { speciesById } from '../data/index.ts';
 import type { Status } from '../engine/types.ts';
 import { ROPE_NAMES, type RopeKind } from '../game/capture.ts';
 import type { Ropes } from '../game/save.ts';
-import { REGIONS, type RegionId } from '../world/regions.ts';
+import { REGIONS, type RegionId } from '../overworld/regions.ts';
 import { OddieArt } from './OddieArt.tsx';
 import './battle.css';
 

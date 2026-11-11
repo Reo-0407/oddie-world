@@ -10,6 +10,7 @@
 
 * { box-sizing: border-box; }
 
+html, body { overscroll-behavior: none; }
 body {
   margin: 0;
   background: var(--bg);
@@ -426,7 +427,7 @@ footer {
   background: #10141a;
   overflow: hidden;
   touch-action: none;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -449,13 +450,14 @@ footer {
 .dialog-choices li.on::before { content: '▶'; position: absolute; left: 4px; }
 @keyframes gv-blink { 50% { opacity: 0; } }
 .gv-pad {
-  position: absolute; left: 12px; bottom: 12px; width: 156px; height: 156px; z-index: 3;
+  /* 버튼 한 칸 60px: 엄지로 누르기 좋은 크기 */
+  position: absolute; left: calc(12px + env(safe-area-inset-left)); bottom: calc(12px + env(safe-area-inset-bottom)); width: 184px; height: 184px; z-index: 3;
   display: none; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 2px; touch-action: none;
 }
 .gv-btn {
   touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
-  min-height: 0; padding: 0; border: 3px solid #23262b; background: rgba(255, 255, 255, 0.78); color: #23262b;
-  font-size: 1.3rem; font-weight: 800; opacity: 0.85;
+  min-height: 0; padding: 0; border: 3px solid #23262b; background: rgba(255, 255, 255, 0.6); color: #23262b;
+  font-size: 1.4rem; font-weight: 800; opacity: 0.75;
 }
 .gv-btn:active { background: #ffd24a; opacity: 1; }
 .gv-pad .up { grid-column: 2; grid-row: 1; border-radius: 10px 10px 0 0; }
@@ -464,12 +466,18 @@ footer {
 .gv-pad .down { grid-column: 2; grid-row: 3; border-radius: 0 0 10px 10px; }
 @media (hover: none), (max-width: 760px) {
   .gv-pad { display: grid; }
-  .dialog { bottom: 180px; }
+  .dialog { bottom: calc(208px + env(safe-area-inset-bottom)); }
+  /* 좁은 화면에서는 십자키 오른쪽으로 비켜 선다 */
+  .gv .gv-menu-btn { left: max(50%, calc(12px + 184px + 12px + 32px + env(safe-area-inset-left))); }
+}
+/* 가로 폰: 대화 상자는 십자키 옆으로 */
+@media (hover: none) and (orientation: landscape) {
+  .dialog { bottom: 8px; left: calc(208px + env(safe-area-inset-left)); }
 }
 
 /* ---------- 포켓몬 고식 메뉴 ---------- */
 .gv-menu-btn {
-  position: absolute; left: 50%; bottom: 14px; z-index: 4; width: 64px; height: 64px; min-height: 0; padding: 0; transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 4; width: 64px; height: 64px; min-height: 0; padding: 0; transform: translateX(-50%);
   border-radius: 50%; border: 3px solid #23262b; overflow: hidden; touch-action: none;
   background: linear-gradient(#e8443a 0 46%, #23262b 46% 54%, #fafafa 54% 100%); box-shadow: 0 4px 10px rgba(0,0,0,.45);
 }
@@ -484,7 +492,8 @@ footer {
 .gm-item:active .gm-icon { transform: scale(0.94); }
 .gm-close { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); width: 64px; height: 64px; border-radius: 50%; border: 3px solid #23262b; background: #fff; font-size: 1.6rem; font-weight: 800; box-shadow: 0 4px 10px rgba(0,0,0,.3); }
 .gm-team { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.gm-mon { display: flex; flex-direction: column; align-items: center; padding: 6px; border-radius: 12px; background: #fff; border: 2px solid #23262b; font-size: 0.85rem; }
+.gm-mon { margin: 0; min-height: 0; color: inherit; font: inherit; display: flex; flex-direction: column; align-items: center; padding: 6px; border-radius: 12px; background: #fff; border: 2px solid #23262b; font-size: 0.85rem; }
+.gm-mon.on { background: #fff3c4; box-shadow: 0 0 0 3px #d94f3d; }
 .gm-bag { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .gm-bag li { display: flex; justify-content: space-between; padding: 10px 14px; border-radius: 12px; background: #fff; border: 2px solid #23262b; }
 .gm-credit { margin: 0; font-size: 0.8rem; text-align: center; opacity: 0.7; }

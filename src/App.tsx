@@ -13,7 +13,7 @@ import type { RtResult } from './battle/realtime.ts';
 import { BADGE_NAMES, BADGE_ORDER, trainerById, type Trainer } from './overworld/encounters.ts';
 import { getMap } from './overworld/maps/index.ts';
 import type { Status } from './engine/types.ts';
-import type { RegionId } from './world/regions.ts';
+import type { RegionId } from './overworld/regions.ts';
 import './ui/app.css';
 
 type Foe = { speciesId: number; level: number };

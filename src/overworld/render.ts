@@ -1,4 +1,4 @@
-import type { RegionId } from '../world/regions.ts';
+import type { RegionId } from './regions.ts';
 import type { Dir, MapData, NpcLook } from './maps/types.ts';
 import { drawCharacter, SPRITE_H, SPRITE_W } from './sprites.ts';
 import { drawTile, TILE } from './tiles.ts';

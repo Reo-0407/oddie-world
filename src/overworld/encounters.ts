@@ -1,5 +1,5 @@
 import { SPECIES } from '../data/index.ts';
-import { pickSpeciesForRegion, type RegionId } from '../world/regions.ts';
+import { pickSpeciesForRegion, type RegionId } from './regions.ts';
 
 /** 구역별 야생 오디 레벨 범위 */
 export const WILD_LEVELS: Record<RegionId, [number, number]> = {

@@ -5,7 +5,7 @@ import {
 } from '../battle/realtime.ts';
 import { createRng } from '../engine/rng.ts';
 import type { Status, TypeName } from '../engine/types.ts';
-import { REGIONS, type RegionId } from '../world/regions.ts';
+import { REGIONS, type RegionId } from '../overworld/regions.ts';
 import { OddieArt, typeColor } from './OddieArt.tsx';
 import './battle.css';
 

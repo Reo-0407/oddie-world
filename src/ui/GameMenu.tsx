@@ -17,20 +17,22 @@ export interface MenuActions {
   onRestart(): void;
 }
 
-type Panel = 'main' | 'dex' | 'team' | 'bag' | 'account' | 'restart';
+type Panel = 'main' | 'dex' | 'team' | 'bag' | 'badges' | 'account' | 'restart';
 
 const ITEMS: { id: Exclude<Panel, 'main'> | 'online'; label: string; icon: string; color: string }[] = [
   { id: 'dex', label: '도감', icon: '▤', color: '#e0523f' },
   { id: 'team', label: '팀', icon: '●', color: '#3f78d8' },
   { id: 'bag', label: '가방', icon: '◆', color: '#e0892f' },
+  { id: 'badges', label: '배지', icon: '★', color: '#d8a520' },
   { id: 'online', label: '친구 대전', icon: '⚔', color: '#8a5ac8' },
   { id: 'account', label: '계정', icon: '☺', color: '#3a9a4a' },
   { id: 'restart', label: '처음부터', icon: '↺', color: '#6b6f78' },
 ];
 
 /** 포켓몬 고처럼 둥근 버튼으로 된 메뉴 */
-export function GameMenu({ data, actions, onClose }: { data: SaveData; actions: MenuActions; onClose(): void }) {
+export function GameMenu({ data, actions, onData, onClose }: { data: SaveData; actions: MenuActions; onData(next: SaveData): void; onClose(): void }) {
   const [panel, setPanel] = useState<Panel>('main');
+  const [picked, setPicked] = useState<number | null>(null);
   if (panel === 'dex') return <DexOverlay dex={data.dex} onClose={() => setPanel('main')} />;
 
   const back = <button type="button" className="wide" onClick={() => setPanel('main')}>뒤로</button>;
@@ -43,13 +45,21 @@ export function GameMenu({ data, actions, onClose }: { data: SaveData; actions: 
           {data.team.map((o, i) => {
             const sp = speciesById(o.speciesId);
             return (
-              <div key={i} className="gm-mon">
+              <button key={i} type="button" className={`gm-mon${picked === i ? ' on' : ''}`} aria-pressed={picked === i} onClick={() => setPicked(picked === i ? null : i)}>
                 <OddieArt speciesId={o.speciesId} name={sp.name} types={sp.types} size={56} />
-                <b>{sp.name}</b><span>Lv.{o.level}</span>
-              </div>
+                <b>{sp.name}</b><span>Lv.{o.level}{i === 0 ? ' · 앞' : ''}</span>
+              </button>
             );
           })}
         </div>
+        {picked !== null && picked > 0 && picked < data.team.length && (
+          <button type="button" className="wide" onClick={() => {
+            const team = [data.team[picked], ...data.team.filter((_, i) => i !== picked)];
+            onData({ ...data, team });
+            setPicked(0);
+          }}>맨 앞으로</button>
+        )}
+        {data.team.length > 1 && picked === null && <p className="note">오디를 누르고 「맨 앞으로」를 누르면 먼저 싸워요</p>}
         {data.box.length > 0 && <p className="note">박스에 {data.box.length}마리</p>}
         {back}
       </>
@@ -58,6 +68,19 @@ export function GameMenu({ data, actions, onClose }: { data: SaveData; actions: 
     body = (
       <>
         <h2>가방</h2>
+        <ul className="gm-bag">
+          <li><span>코인</span><b>{data.coins}</b></li>
+          <li><span>로프</span><b>{data.ropes.basic}</b></li>
+          <li><span>튼튼한 로프</span><b>{data.ropes.sturdy}</b></li>
+          <li><span>회복약</span><b>{data.potions}</b></li>
+        </ul>
+        {back}
+      </>
+    );
+  } else if (panel === 'badges') {
+    body = (
+      <>
+        <h2>배지 {BADGE_ORDER.filter((b) => data.badges.includes(b)).length} / 4</h2>
         <div className="gm-badges" aria-label={`배지 ${data.badges.length}개`}>
           {BADGE_ORDER.map((b) => (
             <span key={b} className={`gm-badge${data.badges.includes(b) ? '' : ' off'}`} style={{ background: BADGE_COLORS[b] }} title={BADGE_NAMES[b]}>
@@ -65,13 +88,6 @@ export function GameMenu({ data, actions, onClose }: { data: SaveData; actions: 
             </span>
           ))}
         </div>
-        <ul className="gm-bag">
-          <li><span>배지</span><b>{BADGE_ORDER.filter((b) => data.badges.includes(b)).length} / 4</b></li>
-          <li><span>코인</span><b>{data.coins}</b></li>
-          <li><span>로프</span><b>{data.ropes.basic}</b></li>
-          <li><span>튼튼한 로프</span><b>{data.ropes.sturdy}</b></li>
-          <li><span>회복약</span><b>{data.potions}</b></li>
-        </ul>
         {back}
       </>
     );
@@ -104,7 +120,7 @@ export function GameMenu({ data, actions, onClose }: { data: SaveData; actions: 
         {ITEMS.map((it) => (
           <button
             key={it.id} type="button" className="gm-item"
-            onClick={() => (it.id === 'online' ? actions.onOnline() : setPanel(it.id))}
+            onClick={() => { setPicked(null); if (it.id === 'online') actions.onOnline(); else setPanel(it.id); }}
           >
             <span className="gm-icon" style={{ background: it.color }} aria-hidden>{it.icon}</span>
             <span>{it.label}</span>

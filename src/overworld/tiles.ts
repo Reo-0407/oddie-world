@@ -1,4 +1,4 @@
-import type { RegionId } from '../world/regions.ts';
+import type { RegionId } from './regions.ts';
 
 export const TILE = 32;
 

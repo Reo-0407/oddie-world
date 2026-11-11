@@ -1,5 +1,10 @@
 import type { TypeName } from '../engine/types.ts';
-import { MODEL_SPECIES_IDS } from '../world/spawns.ts';
+
+/** public/thumbs 에 그림이 있는 종 번호. 빌드 때 폴더를 읽어 채운다 */
+const THUMB_IDS: ReadonlySet<number> = new Set(
+  Object.keys(import.meta.glob('/public/thumbs/OD-*.png', { query: '?url', eager: false }))
+    .map((path) => Number(/OD-(\d+)\.png$/.exec(path)?.[1])),
+);
 
 const COLORS: Record<TypeName, string> = {
   normal: '#b8b8a8', fire: '#f08030', water: '#6890f0', electric: '#f8d030', grass: '#78c850', ice: '#98d8d8',
@@ -12,7 +17,7 @@ export function typeColor(type: TypeName): string {
 }
 
 export function thumbUrl(speciesId: number): string | null {
-  if (!MODEL_SPECIES_IDS.includes(speciesId)) return null;
+  if (!THUMB_IDS.has(speciesId)) return null;
   return `${import.meta.env.BASE_URL}thumbs/OD-${String(speciesId).padStart(3, '0')}.png`;
 }
 

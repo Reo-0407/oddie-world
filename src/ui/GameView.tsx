@@ -12,7 +12,7 @@ import {
   type Dir, type PlayerState,
 } from '../overworld/world.ts';
 import { rollWild } from '../overworld/encounters.ts';
-import type { RegionId } from '../world/regions.ts';
+import type { RegionId } from '../overworld/regions.ts';
 import { Dialog, type DialogControl } from './Dialog.tsx';
 import { GameMenu, type MenuActions } from './GameMenu.tsx';
 import { ShopPanel } from './ShopPanel.tsx';
@@ -391,7 +391,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
           <span />
         </button>
       )}
-      {menuOpen && <GameMenu data={data} actions={menu} onClose={() => setMenuOpen(false)} />}
+      {menuOpen && <GameMenu data={data} actions={menu} onData={(next) => { dataRef.current = next; onData(next); }} onClose={() => setMenuOpen(false)} />}
       {overlay === 'shop' && (
         <ShopPanel data={data} onBuy={(next) => { dataRef.current = next; onData(next); }} onClose={() => { setOverlay(null); api.current?.say(['또 오세요!'], '점원'); }} />
       )}
