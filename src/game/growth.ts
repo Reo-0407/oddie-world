@@ -11,9 +11,9 @@ export function expToNext(level: number): number {
   return Math.floor(level * level * 1.2) + 10;
 }
 
-/** 쓰러뜨린 상대의 레벨과 등급으로 받는 경험치 */
+/** 쓰러뜨린 상대의 레벨과 등급으로 받는 경험치 (레벨 5 스타터가 길 야생·트레이너만으로 챔피언 Lv 32~35까지 자랄 수 있게 12배) */
 export function gainExp(defeatedLevel: number, rarity: Rarity): number {
-  return Math.round(defeatedLevel * 9 * EXP_MULTIPLIER[rarity]);
+  return Math.round(defeatedLevel * 12 * EXP_MULTIPLIER[rarity]);
 }
 
 /** 이겼을 때 받는 코인 */

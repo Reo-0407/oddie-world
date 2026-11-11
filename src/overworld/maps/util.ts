@@ -31,3 +31,31 @@ export function building(g: Grid, b: Building): { x: number; y: number } {
   put(g, door.x, door.y, 'D');
   return door;
 }
+
+/** 지도마다 늘 같은 모양이 나오게 하는 작은 난수 */
+export function rng(seed: number): () => number {
+  let s = seed >>> 0 || 1;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+/** on 문자인 칸 n곳에 ch를 흩뿌린다 */
+export function scatter(g: Grid, rand: () => number, ch: string, n: number, on = '.') {
+  const h = g.length;
+  const w = g[0].length;
+  for (let k = 0, tries = 0; k < n && tries < n * 60; tries += 1) {
+    const x = Math.floor(rand() * w);
+    const y = Math.floor(rand() * h);
+    if (g[y][x] === on) { g[y][x] = ch; k += 1; }
+  }
+}
+
+/** 사각형 테두리를 ch로 */
+export function border(g: Grid, ch: string, t = 1) {
+  const h = g.length;
+  const w = g[0].length;
+  fill(g, 0, 0, w, t, ch); fill(g, 0, h - t, w, t, ch);
+  fill(g, 0, 0, t, h, ch); fill(g, w - t, 0, t, h, ch);
+}

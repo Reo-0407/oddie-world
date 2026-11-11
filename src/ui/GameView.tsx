@@ -1,17 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import { TOWN_START, type SaveData } from '../game/save.ts';
+import { START_LEVEL, TOWN_START, type SaveData } from '../game/save.ts';
+import { markCaught } from '../game/dex.ts';
+import { speciesById } from '../data/index.ts';
 import { getMap } from '../overworld/maps/index.ts';
 import type { MapData, Npc } from '../overworld/maps/types.ts';
 import { createRenderer, type Actor } from '../overworld/render.ts';
 import { PLAYER_LOOKS } from '../overworld/sprites.ts';
 import { TILE } from '../overworld/tiles.ts';
 import {
-  DELTA, STEP_MS, canStep, interactTarget, npcInSight, stepPlayer, type Dir, type PlayerState,
+  DELTA, STEP_MS, canStep, exitOf, facingTile, gateOpen, interactTarget, npcInSight, npcLines, placeNpcs, progressOf, stepPlayer,
+  type Dir, type PlayerState,
 } from '../overworld/world.ts';
 import { rollWild } from '../overworld/encounters.ts';
 import type { RegionId } from '../world/regions.ts';
 import { Dialog, type DialogControl } from './Dialog.tsx';
 import { GameMenu, type MenuActions } from './GameMenu.tsx';
+import { ShopPanel } from './ShopPanel.tsx';
+import { StarterScreen } from './StarterScreen.tsx';
 
 export interface EncounterInfo { speciesId: number; level: number; region: RegionId }
 
@@ -48,7 +53,10 @@ const B_KEYS = new Set(['KeyX', 'Escape']);
 const FADE_MS = 150;
 const FLASH_MS = 380;
 
-const cloneNpcs = (map: MapData): NpcRt[] => map.npcs.map((n) => ({ ...n, anim: null, bubble: false }));
+const cloneNpcs = (map: MapData, data: SaveData): NpcRt[] => placeNpcs(map, progressOf(data)).map((n) => ({ ...n, anim: null, bubble: false }));
+const HEAL_MS = 900;
+/** 박사가 스타터와 함께 주는 로프 */
+export const LAB_ROPES = 5;
 
 /** 위에서 내려다보는 2D 월드: 캔버스 + 키보드/터치 조작 + 대화 상자 */
 export function GameView({ data, onData, onEncounter, onTrainer, message, menu }: Props) {
@@ -62,10 +70,11 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
   const [dialog, setDialog] = useState<DialogSpec | null>(null);
   const [mapName, setMapName] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [overlay, setOverlay] = useState<null | 'shop' | 'starter'>(null);
   const menuRef = useRef(false);
-  menuRef.current = menuOpen;
+  menuRef.current = menuOpen || overlay !== null;
   const firstMessage = useRef(message);
-  const api = useRef<{ press(d: Dir): void; release(d: Dir): void; a(): void } | null>(null);
+  const api = useRef<{ press(d: Dir): void; release(d: Dir): void; a(): void; say(pages: string[], speaker?: string): void } | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -80,7 +89,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
     const first = getMap(start.map) ? start : { ...start, ...TOWN_START };
     let map: MapData = getMap(first.map)!;
     const player: PlayerState = { map: map.id, x: first.x, y: first.y, facing: first.facing };
-    let npcs = cloneNpcs(map);
+    let npcs = cloneNpcs(map, start);
     const look = PLAYER_LOOKS[start.characterIndex % PLAYER_LOOKS.length];
     setMapName(map.name);
 
@@ -89,6 +98,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       pending: null as null | { warp?: PlayerState; encounter?: boolean },
       fade: null as null | { t: number; dest: PlayerState; switched: boolean },
       flash: null as null | { t: number; info: EncounterInfo },
+      heal: null as null | { t: number; done(): void },
       ev: null as null | { npc: NpcRt; phase: 'bubble' | 'walk'; t: number },
       held: [] as Dir[],
       triggered: new Set<string>(),
@@ -119,7 +129,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
     const loadMap = (dest: PlayerState) => {
       map = getMap(dest.map)!;
       Object.assign(player, dest);
-      npcs = cloneNpcs(map);
+      npcs = cloneNpcs(map, dataRef.current);
       rt.triggered.clear();
       setMapName(map.name);
       persist();
@@ -127,7 +137,10 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
 
     const blocked = (x: number, y: number) => !canStep(map, npcs, x, y);
 
+    const setData = (next: SaveData) => { dataRef.current = next; cb.current.onData(next); };
+
     const checkTrainers = () => {
+      if (dataRef.current.team.length === 0) return;
       for (const n of npcs) {
         if (!n.trainer || dataRef.current.beaten.includes(n.id) || rt.triggered.has(n.id)) continue;
         if (npcInSight(n, player, n.trainer.sight, blocked)) {
@@ -146,14 +159,32 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         if (beaten) return openDialog({ speaker: n.name, pages: n.trainer.after });
         return openDialog({ speaker: n.name, pages: n.trainer.before, after: finish(() => { rt.triggered.add(n.id); cb.current.onTrainer(n.id); }) });
       }
+      const p = progressOf(dataRef.current);
+      const lines = npcLines(n, p);
+      if (n.role === 'nurse') {
+        return openDialog({
+          speaker: n.name, pages: lines,
+          after: finish(() => {
+            rt.heal = { t: 0, done: () => {
+              const out = exitOf(map);
+              if (out) setData({ ...dataRef.current, respawn: out });
+              openDialog({ speaker: n.name, pages: ['오디들이 모두 건강해졌어요!', '쓰러지면 이 오디 센터 앞에서 다시 시작해요. 또 오세요!'] });
+            } };
+          }),
+        });
+      }
+      if (n.role === 'clerk') return openDialog({ speaker: n.name, pages: lines, after: finish(() => { rt.held = []; setOverlay('shop'); }) });
+      if (n.role === 'professor' && !p.flags.includes('starter')) {
+        return openDialog({ speaker: n.name, pages: lines, after: finish(() => { rt.held = []; setOverlay('starter'); }) });
+      }
       const ch = n.choice;
       openDialog({
-        speaker: n.name, pages: n.lines, choices: ch?.options,
+        speaker: n.name, pages: lines, choices: ch?.options,
         after: finish((c) => { if (ch && c !== undefined) openDialog({ speaker: n.name, pages: ch.replies[c], after: finish() }); }),
       });
     };
 
-    const idle = () => !rt.anim && !rt.fade && !rt.flash && !rt.ev && !rt.dialogOpen && !menuRef.current;
+    const idle = () => !rt.anim && !rt.fade && !rt.flash && !rt.heal && !rt.ev && !rt.dialogOpen && !menuRef.current;
 
     const pressA = () => {
       if (rt.dialogOpen) return control.current?.press();
@@ -170,6 +201,10 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         player.facing = r.state.facing;
         rt.cooldown = 110;
         persist();
+        // 닫힌 문지기에게 부딪히면 말을 건다
+        const f = facingTile(player);
+        const gate = npcs.find((n) => n.gate && n.x === f.x && n.y === f.y && !gateOpen(n, progressOf(dataRef.current)));
+        if (gate) { rt.held = []; speak(gate); }
         return;
       }
       rt.anim = { fx: player.x, fy: player.y, t: 0 };
@@ -190,7 +225,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       rt.pending = null;
       if (p?.warp) { rt.fade = { t: 0, dest: p.warp, switched: false }; return; }
       persist();
-      if (p?.encounter) {
+      if (p?.encounter && dataRef.current.team.length > 0) {
         rt.flash = { t: 0, info: rollWild(map.region, Math.random) };
         return;
       }
@@ -250,6 +285,9 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
           rt.flash = null;
           cb.current.onEncounter(info);
         }
+      } else if (rt.heal) {
+        rt.heal.t += dt;
+        if (rt.heal.t >= HEAL_MS) { const h = rt.heal; rt.heal = null; h.done(); }
       } else if (rt.anim) {
         rt.anim.t += dt;
         if (rt.anim.t >= STEP_MS) finishStep();
@@ -271,7 +309,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         ...lerp(n.x, n.y, n.anim), look: n.look, dir: n.facing, frame: n.anim ? 1 + (Math.floor(n.anim.t / 90) % 2) : 0, bubble: n.bubble,
       });
       const fadeA = rt.fade ? (rt.fade.t < FADE_MS ? rt.fade.t / FADE_MS : Math.max(0, 2 - rt.fade.t / FADE_MS)) : 0;
-      const flashA = rt.flash ? (Math.floor(rt.flash.t / 95) % 2 === 0 ? 0.85 : 0.1) : 0;
+      const flashA = rt.flash ? (Math.floor(rt.flash.t / 95) % 2 === 0 ? 0.85 : 0.1) : rt.heal ? 0.7 * Math.abs(Math.sin((rt.heal.t / HEAL_MS) * Math.PI * 3)) : 0;
       renderer.draw({
         map, time: rt.time, fade: Math.min(1, fadeA), flash: flashA,
         player: { ...pp, look, dir: player.facing, frame: moving },
@@ -286,7 +324,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       rt.held = [...rt.held.filter((h) => h !== d), d];
     };
     const release = (d: Dir) => { rt.held = rt.held.filter((h) => h !== d); };
-    api.current = { press, release, a: pressA };
+    api.current = { press, release, a: pressA, say: (pages, speaker) => openDialog({ speaker, pages }) };
 
     const onKeyDown = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -354,6 +392,25 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         </button>
       )}
       {menuOpen && <GameMenu data={data} actions={menu} onClose={() => setMenuOpen(false)} />}
+      {overlay === 'shop' && (
+        <ShopPanel data={data} onBuy={(next) => { dataRef.current = next; onData(next); }} onClose={() => { setOverlay(null); api.current?.say(['또 오세요!'], '점원'); }} />
+      )}
+      {overlay === 'starter' && (
+        <div className="gv-overlay" onPointerDown={(e) => e.stopPropagation()}>
+          <StarterScreen onPick={(id) => {
+            const d = dataRef.current;
+            const next: SaveData = {
+              ...d, team: [{ speciesId: id, level: START_LEVEL, exp: 0 }], playerLevel: START_LEVEL, dex: markCaught(d.dex, id),
+              ropes: { ...d.ropes, basic: d.ropes.basic + LAB_ROPES }, flags: d.flags.includes('starter') ? d.flags : [...d.flags, 'starter'],
+            };
+            dataRef.current = next;
+            onData(next);
+            setOverlay(null);
+            api.current?.say([`${speciesById(id).name}을(를) 받았다!`, `로프 ${LAB_ROPES}개도 받았다!`,
+              '풀숲에서 야생 오디를 만나면 싸워서 이긴 다음 로프를 휙 던져 잡아 보렴.', '그럼, 멋진 모험을 떠나렴!'], '박사님');
+          }} />
+        </div>
+      )}
     </div>
   );
 }

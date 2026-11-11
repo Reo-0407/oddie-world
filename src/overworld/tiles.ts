@@ -8,12 +8,12 @@ export type Tile = number;
 export type Kind =
   | 'grass' | 'tall' | 'path' | 'water' | 'tree' | 'flower' | 'fence' | 'rock' | 'sand' | 'snow' | 'ice'
   | 'lava' | 'volcano' | 'cactus' | 'wall' | 'window' | 'door' | 'roof' | 'sign' | 'floor' | 'carpet'
-  | 'counter' | 'shelf' | 'machine' | 'gym' | 'iwall' | 'iwall2';
+  | 'counter' | 'shelf' | 'machine' | 'gym' | 'iwall' | 'iwall2' | 'pillar' | 'marble';
 
 const KINDS: Kind[] = [
   'grass', 'tall', 'path', 'water', 'tree', 'flower', 'fence', 'rock', 'sand', 'snow', 'ice',
   'lava', 'volcano', 'cactus', 'wall', 'window', 'door', 'roof', 'sign', 'floor', 'carpet',
-  'counter', 'shelf', 'machine', 'gym', 'iwall', 'iwall2',
+  'counter', 'shelf', 'machine', 'gym', 'iwall', 'iwall2', 'pillar', 'marble',
 ];
 const KIND_ID = Object.fromEntries(KINDS.map((k, i) => [k, i])) as Record<Kind, number>;
 
@@ -22,8 +22,9 @@ export const CHAR_KIND: Record<string, Kind> = {
   '.': 'grass', '"': 'tall', ':': 'path', '~': 'water', T: 'tree', f: 'flower', '=': 'fence', o: 'rock',
   s: 'sand', n: 'snow', i: 'ice', l: 'lava', v: 'volcano', C: 'cactus', W: 'wall', w: 'window', D: 'door',
   Y: 'sign', _: 'floor', c: 'carpet', K: 'counter', h: 'shelf', m: 'machine', x: 'gym', I: 'iwall', J: 'iwall2',
+  X: 'pillar', g: 'marble',
 };
-export const ROOF_CHARS = 'RBGNOP'; // 빨강 파랑 회색 초록 주황 보라
+export const ROOF_CHARS = 'RBGNOPUZQ'; // 빨강 파랑 회색 초록 주황 보라 금색 얼음 진홍
 
 // 부가 정보 비트: 1=왼쪽 끝, 2=오른쪽 끝, 4=아래 끝, 8=지붕 아래(그림자), 16=지붕 첫 줄, 32=지붕 마지막 줄, 색은 <<8
 const L = 1, R = 2, B = 4, UNDER = 8, TOP = 16, EAVE = 32;
@@ -68,7 +69,7 @@ export function parseRows(rows: string[]): Tile[][] {
   }));
 }
 
-const WALKABLE = new Set<Kind>(['grass', 'tall', 'path', 'flower', 'sand', 'snow', 'ice', 'volcano', 'door', 'floor', 'carpet', 'gym']);
+const WALKABLE = new Set<Kind>(['grass', 'tall', 'path', 'flower', 'sand', 'snow', 'ice', 'volcano', 'door', 'floor', 'carpet', 'gym', 'marble']);
 export const isWalkable = (t: Tile) => WALKABLE.has(kindOf(t));
 export const isGrass = (t: Tile) => kindOf(t) === 'tall';
 export const isDoor = (t: Tile) => kindOf(t) === 'door';
@@ -96,13 +97,40 @@ const rnd = (seed: number, i: number) => {
 
 const GROUND: Record<RegionId, { base: string; dark: string; light: string; tall: string; tallDark: string; tallTip: string }> = {
   meadow: { base: '#68b946', dark: '#58a53a', light: '#80cf5c', tall: '#3f9a3a', tallDark: '#2c7a2e', tallTip: '#8fe07a' },
-  desert: { base: '#c9b36a', dark: '#b79e55', light: '#dcc780', tall: '#a8964a', tallDark: '#80702f', tallTip: '#d9c870' },
-  snow: { base: '#dfeaf2', dark: '#c6d8e6', light: '#f4f9fc', tall: '#7fb59a', tallDark: '#4f8a72', tallTip: '#c5ecd9' },
-  volcano: { base: '#6a5654', dark: '#584644', light: '#7e6966', tall: '#7a4a3a', tallDark: '#552e24', tallTip: '#d9782e' },
+  desert: { base: '#e3c98c', dark: '#cdb06e', light: '#f2dfaa', tall: '#c2a04a', tallDark: '#8f7128', tallTip: '#f2dc80' },
+  snow: { base: '#e8f0f6', dark: '#cbdbe8', light: '#ffffff', tall: '#5f9a84', tallDark: '#3b6e5e', tallTip: '#ffffff' },
+  volcano: { base: '#5e4f4d', dark: '#4a3d3b', light: '#76625f', tall: '#6a3a30', tallDark: '#3e1f1a', tallTip: '#ff8a3a' },
 };
 
+/** 구역마다 다른 바닥: 초원 풀, 사막 모래 물결, 설원 눈, 화산 재 */
 function ground(c: Ctx, x: number, y: number, seed: number, g = GROUND.meadow) {
   rect(c, g.base, x, y, TILE, TILE);
+  if (g === GROUND.desert) {
+    for (let i = 0; i < 3; i += 1) {
+      const px = x + Math.floor(rnd(seed, i) * 20);
+      const py = y + 4 + i * 10 + Math.floor(rnd(seed, i + 4) * 4);
+      rect(c, g.dark, px, py + 1, 8, 1); rect(c, g.dark, px + 8, py, 4, 1);
+      rect(c, g.light, px + 1, py, 6, 1);
+    }
+    for (let i = 0; i < 3; i += 1) rect(c, '#b89a62', x + Math.floor(rnd(seed, i + 9) * 29), y + Math.floor(rnd(seed, i + 12) * 29), 2, 2);
+    return;
+  }
+  if (g === GROUND.snow) {
+    for (let i = 0; i < 3; i += 1) {
+      const px = x + Math.floor(rnd(seed, i) * 22);
+      const py = y + Math.floor(rnd(seed, i + 5) * 26);
+      rect(c, g.dark, px, py + 2, 9, 2); rect(c, g.dark, px + 2, py + 4, 5, 1);
+      rect(c, g.light, px + 1, py, 7, 2);
+    }
+    for (let i = 0; i < 2; i += 1) rect(c, '#bcd4ea', x + Math.floor(rnd(seed, i + 9) * 30), y + Math.floor(rnd(seed, i + 11) * 30), 1, 1);
+    return;
+  }
+  if (g === GROUND.volcano) {
+    for (let i = 0; i < 6; i += 1) rect(c, g.dark, x + Math.floor(rnd(seed, i) * 28), y + Math.floor(rnd(seed, i + 9) * 30), 3, 2);
+    for (let i = 0; i < 3; i += 1) rect(c, g.light, x + Math.floor(rnd(seed, i + 20) * 29), y + Math.floor(rnd(seed, i + 30) * 29), 2, 1);
+    if (seed % 2 === 0) rect(c, '#c8502a', x + 6 + Math.floor(rnd(seed, 40) * 20), y + 8 + Math.floor(rnd(seed, 41) * 18), 1, 1);
+    return;
+  }
   for (let i = 0; i < 5; i += 1) {
     rect(c, g.dark, x + Math.floor(rnd(seed, i) * 28), y + Math.floor(rnd(seed, i + 9) * 30), 3, 1);
   }
@@ -114,9 +142,136 @@ function ground(c: Ctx, x: number, y: number, seed: number, g = GROUND.meadow) {
   }
 }
 
+/** 구역별 나무: 초원 둥근 나무, 사막 야자, 설원 눈 덮인 전나무, 화산 그을린 고목 */
+function drawTree(c: Ctx, x: number, y: number, seed: number, region: RegionId) {
+  ground(c, x, y, seed, GROUND[region]);
+  if (region === 'desert') {
+    disc(c, 'rgba(90,60,20,0.3)', x + 16, y + 29, 9);
+    for (let i = 0; i < 6; i += 1) {
+      const bx = x + 14 + Math.round(Math.sin(i * 0.5) * 2);
+      rect(c, '#6e4a22', bx, y + 12 + i * 3, 5, 3);
+      rect(c, '#9a6a34', bx + 1, y + 12 + i * 3, 2, 2);
+    }
+    const leaf = (dy: number, w: number, dir: number) => {
+      for (let k = 0; k < w; k += 1) {
+        const ly = y + dy + Math.floor((k * k) / (w * 1.4));
+        const lx = x + 16 + dir * k - (dir < 0 ? 2 : 0);
+        rect(c, '#1f6a2a', lx, ly, 2, 3);
+        rect(c, '#3e9a3e', lx, ly, 2, 1);
+      }
+    };
+    leaf(9, 14, 1); leaf(9, 14, -1); leaf(6, 10, 1); leaf(6, 10, -1);
+    rect(c, '#2e8a36', x + 12, y + 3, 8, 5); rect(c, '#5cc05a', x + 13, y + 3, 4, 2);
+    rect(c, '#7a4a1a', x + 13, y + 9, 3, 3); rect(c, '#7a4a1a', x + 17, y + 10, 3, 3);
+    return;
+  }
+  if (region === 'snow') {
+    disc(c, 'rgba(60,90,120,0.25)', x + 16, y + 29, 10);
+    rect(c, '#5a3a20', x + 14, y + 25, 4, 6);
+    const tier = (top: number, half: number, h: number) => {
+      for (let r = 0; r < h; r += 1) {
+        const hw = Math.max(1, Math.round(((r + 1) / h) * half));
+        rect(c, '#1e4a3a', x + 16 - hw, y + top + r, hw * 2, 1);
+        rect(c, '#2e6a50', x + 16 - hw + 1, y + top + r, Math.max(1, hw - 1), 1);
+      }
+      rect(c, '#ffffff', x + 16 - half + 1, y + top + h - 2, half * 2 - 2, 2);
+      rect(c, '#dceaf4', x + 16 - half + 2, y + top + h, half * 2 - 4, 1);
+    };
+    tier(1, 6, 8); tier(8, 10, 9); tier(16, 14, 10);
+    rect(c, '#ffffff', x + 15, y + 1, 2, 2);
+    return;
+  }
+  if (region === 'volcano') {
+    disc(c, 'rgba(0,0,0,0.3)', x + 16, y + 29, 9);
+    rect(c, '#1e1614', x + 13, y + 10, 6, 21);
+    rect(c, '#3a2c28', x + 14, y + 10, 3, 21);
+    const branch = (bx: number, by: number, dx: number, n: number) => {
+      for (let k = 0; k < n; k += 1) rect(c, '#1e1614', x + bx + dx * k, y + by - k, 3, 2);
+    };
+    branch(16, 14, 2, 6); branch(13, 16, -2, 5); branch(18, 9, 1, 6); branch(12, 9, -1, 5);
+    rect(c, '#ff7a2a', x + 15, y + 22, 1, 2); rect(c, '#ffb25a', x + 15, y + 22, 1, 1);
+    return;
+  }
+  disc(c, 'rgba(20,60,20,0.35)', x + 16, y + 28, 11);
+  rect(c, '#5e3818', x + 12, y + 18, 8, 12);
+  rect(c, '#7a4a21', x + 13, y + 18, 5, 12);
+  rect(c, '#9a6330', x + 13, y + 18, 2, 11);
+  disc(c, '#1f5c26', x + 16, y + 13, 15);
+  disc(c, '#2f7d32', x + 16, y + 12, 13);
+  disc(c, '#3f9a3a', x + 14, y + 10, 10);
+  disc(c, '#62c04b', x + 11, y + 7, 5);
+  rect(c, '#8fe07a', x + 9, y + 5, 3, 2);
+  rect(c, '#2a6a2c', x + 19, y + 15, 6, 2);
+}
+
+/** 구역별 바위: 회색 돌, 사막 사암, 눈 덮인 돌, 빨갛게 갈라진 화산암 */
+function drawRock(c: Ctx, x: number, y: number, seed: number, region: RegionId) {
+  ground(c, x, y, seed, GROUND[region]);
+  disc(c, 'rgba(0,0,0,0.25)', x + 16, y + 27, 11);
+  if (region === 'desert') {
+    rect(c, '#7a4a28', x + 4, y + 8, 24, 21);
+    rect(c, '#c27a44', x + 5, y + 9, 22, 19);
+    rect(c, '#d99a5c', x + 5, y + 9, 22, 5);
+    rect(c, '#a8623a', x + 5, y + 17, 22, 2);
+    rect(c, '#a8623a', x + 5, y + 23, 22, 2);
+    rect(c, '#f0be82', x + 7, y + 10, 8, 2);
+    rect(c, '#7a4a28', x + 18, y + 13, 1, 4);
+    return;
+  }
+  if (region === 'volcano') {
+    disc(c, '#14100f', x + 16, y + 18, 12);
+    disc(c, '#2a2220', x + 16, y + 17, 11);
+    disc(c, '#3e3432', x + 13, y + 14, 6);
+    rect(c, '#e8481c', x + 10, y + 20, 6, 1); rect(c, '#e8481c', x + 15, y + 21, 1, 4);
+    rect(c, '#ffb02e', x + 11, y + 20, 2, 1);
+    rect(c, '#e8481c', x + 19, y + 12, 1, 5); rect(c, '#e8481c', x + 20, y + 16, 4, 1);
+    rect(c, '#5a4a48', x + 10, y + 10, 4, 2);
+    return;
+  }
+  disc(c, '#4a4f58', x + 16, y + 18, 12);
+  disc(c, '#8a8f98', x + 16, y + 17, 11);
+  disc(c, '#b5bac2', x + 13, y + 14, 6);
+  rect(c, '#d8dce2', x + 10, y + 11, 4, 2);
+  rect(c, '#6a6f78', x + 20, y + 20, 5, 2);
+  if (region === 'snow') {
+    disc(c, '#ffffff', x + 15, y + 10, 7);
+    rect(c, '#dceaf4', x + 8, y + 13, 16, 2);
+    rect(c, '#ffffff', x + 9, y + 11, 14, 2);
+  }
+}
+
+const PATH: Record<RegionId, [string, string, string]> = {
+  meadow: ['#d6b373', '#c19a5a', '#e8cd96'],
+  desert: ['#c8a062', '#a8824a', '#dcb87c'],
+  snow: ['#c5d3e0', '#a9bccd', '#dfe8f0'],
+  volcano: ['#8a7670', '#6a5650', '#a8948c'],
+};
+
+const GYM: Record<RegionId, [string, string, string]> = {
+  meadow: ['#7cc06a', '#92d27e', '#5a9a4a'],
+  desert: ['#d9b47a', '#e8c890', '#b08850'],
+  snow: ['#a8d8f0', '#c8ecfa', '#7fb8d8'],
+  volcano: ['#3a2e2e', '#4a3a3a', '#1e1616'],
+};
+
+/** 체육관 바닥: 구역색 바둑판 + 구역 무늬 */
+function gymFloor(c: Ctx, x: number, y: number, seed: number, region: RegionId) {
+  const [a, b, line] = GYM[region];
+  const dark = seed % 2 === 0;
+  rect(c, dark ? a : b, x, y, TILE, TILE);
+  rect(c, line, x, y, TILE, 1);
+  rect(c, line, x, y, 1, TILE);
+  if (!dark) return;
+  if (region === 'meadow') { rect(c, b, x + 12, y + 14, 8, 3); rect(c, b, x + 15, y + 10, 2, 12); }
+  else if (region === 'desert') { rect(c, b, x + 10, y + 10, 12, 12); rect(c, a, x + 13, y + 13, 6, 6); }
+  else if (region === 'snow') { rect(c, '#ffffff', x + 15, y + 8, 2, 16); rect(c, '#ffffff', x + 8, y + 15, 16, 2); }
+  else { rect(c, '#e8481c', x + 6, y + 20, 8, 1); rect(c, '#e8481c', x + 13, y + 21, 1, 5); rect(c, '#e8481c', x + 20, y + 8, 6, 1); }
+}
+
 const ROOFS = [
   ['#d94f3d', '#f08a74', '#9c2f24'], ['#3f78d8', '#7eaaf2', '#264f9c'], ['#8b929c', '#bcc2cb', '#575d66'],
   ['#3a9a4a', '#6cc87a', '#246a30'], ['#e0892f', '#f4b86a', '#a85a16'], ['#8a5ac8', '#b890ea', '#5a3794'],
+  ['#e0b030', '#f8dc70', '#a07818'], ['#4ab0d8', '#9adcf2', '#24708f'], ['#8a2a2a', '#c85a4a', '#4e1212'],
 ];
 const OUTLINE = '#2b2024';
 const WALL = '#f3e6c4';
@@ -136,7 +291,7 @@ function wallBase(c: Ctx, x: number, y: number, info: number) {
 
 function drawRoof(c: Ctx, t: Tile, x: number, y: number) {
   const info = extra(t) & 0xff;
-  const [mid, light, dark] = ROOFS[(t >> 16) & 7];
+  const [mid, light, dark] = ROOFS[(t >> 16) & 15];
   rect(c, mid, x, y, TILE, TILE);
   // 기와: 8px 줄마다 어두운 선과 엇갈린 세로 틈
   for (let r = 0; r < 4; r += 1) {
@@ -178,16 +333,19 @@ export function drawTile(c: Ctx, t: Tile, x: number, y: number, frame: number, r
           rect(c, g.tallDark, bx + 1, by, 1, 4);
           rect(c, g.tallTip, bx + 1, by - 1, 1, 3);
           rect(c, g.tallTip, bx, by + 4, 1, 4);
+          if (region === 'snow') rect(c, '#ffffff', bx, by - 1, 3, 2);
+          if (region === 'volcano' && (k + row) % 3 === 0) rect(c, '#ffd27a', bx + 1, by - 2, 1, 1);
         }
       }
       break;
     }
     case 'path': {
-      rect(c, '#d6b373', x, y, TILE, TILE);
-      for (let i = 0; i < 7; i += 1) rect(c, '#c19a5a', x + Math.floor(rnd(seed, i) * 28), y + Math.floor(rnd(seed, i + 7) * 30), 3, 2);
-      for (let i = 0; i < 4; i += 1) rect(c, '#e8cd96', x + Math.floor(rnd(seed, i + 14) * 28), y + Math.floor(rnd(seed, i + 21) * 28), 2, 1);
-      rect(c, '#e4c68b', x, y, TILE, 1);
-      rect(c, '#e4c68b', x, y, 1, TILE);
+      const [base, dark, light] = PATH[region];
+      rect(c, base, x, y, TILE, TILE);
+      for (let i = 0; i < 7; i += 1) rect(c, dark, x + Math.floor(rnd(seed, i) * 28), y + Math.floor(rnd(seed, i + 7) * 30), 3, 2);
+      for (let i = 0; i < 4; i += 1) rect(c, light, x + Math.floor(rnd(seed, i + 14) * 28), y + Math.floor(rnd(seed, i + 21) * 28), 2, 1);
+      rect(c, light, x, y, TILE, 1);
+      rect(c, light, x, y, 1, TILE);
       break;
     }
     case 'water': {
@@ -200,20 +358,7 @@ export function drawTile(c: Ctx, t: Tile, x: number, y: number, frame: number, r
       }
       break;
     }
-    case 'tree': {
-      ground(c, x, y, seed, g);
-      disc(c, 'rgba(20,60,20,0.35)', x + 16, y + 28, 11);
-      rect(c, '#5e3818', x + 12, y + 18, 8, 12);
-      rect(c, '#7a4a21', x + 13, y + 18, 5, 12);
-      rect(c, '#9a6330', x + 13, y + 18, 2, 11);
-      disc(c, '#1f5c26', x + 16, y + 13, 15);
-      disc(c, '#2f7d32', x + 16, y + 12, 13);
-      disc(c, '#3f9a3a', x + 14, y + 10, 10);
-      disc(c, '#62c04b', x + 11, y + 7, 5);
-      rect(c, '#8fe07a', x + 9, y + 5, 3, 2);
-      rect(c, '#2a6a2c', x + 19, y + 15, 6, 2);
-      break;
-    }
+    case 'tree': drawTree(c, x, y, seed, region); break;
     case 'flower': {
       ground(c, x, y, seed, g);
       const cols = ['#e8484f', '#f7d340', '#ffffff', '#f283c1'];
@@ -239,16 +384,7 @@ export function drawTile(c: Ctx, t: Tile, x: number, y: number, frame: number, r
       rect(c, '#e8c088', x + 13, y + 7, 2, 20);
       break;
     }
-    case 'rock': {
-      ground(c, x, y, seed, g);
-      disc(c, 'rgba(0,0,0,0.25)', x + 16, y + 27, 11);
-      disc(c, '#4a4f58', x + 16, y + 18, 12);
-      disc(c, '#8a8f98', x + 16, y + 17, 11);
-      disc(c, '#b5bac2', x + 13, y + 14, 6);
-      rect(c, '#d8dce2', x + 10, y + 11, 4, 2);
-      rect(c, '#6a6f78', x + 20, y + 20, 5, 2);
-      break;
-    }
+    case 'rock': drawRock(c, x, y, seed, region); break;
     case 'sand': {
       rect(c, '#e8d29a', x, y, TILE, TILE);
       for (let i = 0; i < 6; i += 1) rect(c, '#d4bb7c', x + Math.floor(rnd(seed, i) * 28), y + Math.floor(rnd(seed, i + 6) * 30), 3, 1);
@@ -272,13 +408,17 @@ export function drawTile(c: Ctx, t: Tile, x: number, y: number, frame: number, r
       break;
     }
     case 'lava': {
-      rect(c, '#e8481c', x, y, TILE, TILE);
-      rect(c, '#8a2a10', x, y, TILE, 2);
-      for (let i = 0; i < 4; i += 1) {
-        const ox = (i * 9 + frame * 6) % 26;
-        disc(c, '#ffb02e', x + 4 + ox, y + 6 + (i * 7) % 22, 3);
-        rect(c, '#ffe27a', x + 4 + ox, y + 5 + (i * 7) % 22, 3, 1);
+      rect(c, '#d8401a', x, y, TILE, TILE);
+      // 녹은 줄기가 frame마다 흘러간다
+      for (let r = 0; r < 4; r += 1) {
+        const ox = (r * 11 + frame * 8 + seed * 5) % 32;
+        rect(c, '#f06a24', x, y + r * 8 + 2, TILE, 3);
+        rect(c, '#ffb02e', x + Math.max(0, ox - 6), y + r * 8 + 3, 10, 1);
+        rect(c, '#ffb02e', x + ((ox + 18) % 26), y + r * 8 + 3, 6, 1);
       }
+      disc(c, '#ffd25a', x + 8 + ((frame + seed) % 2) * 14, y + 10 + (seed % 2) * 10, 2);
+      rect(c, '#fff2a8', x + 7 + ((frame + seed) % 2) * 14, y + 9 + (seed % 2) * 10, 2, 1);
+      rect(c, '#7a1e0c', x, y, TILE, 1);
       break;
     }
     case 'volcano': {
@@ -289,7 +429,7 @@ export function drawTile(c: Ctx, t: Tile, x: number, y: number, frame: number, r
       break;
     }
     case 'cactus': {
-      rect(c, '#e8d29a', x, y, TILE, TILE);
+      ground(c, x, y, seed, g);
       disc(c, 'rgba(0,0,0,0.18)', x + 16, y + 28, 9);
       rect(c, '#1e5a2c', x + 11, y + 4, 10, 26);
       rect(c, '#2e8a44', x + 12, y + 5, 8, 24);
@@ -381,11 +521,37 @@ export function drawTile(c: Ctx, t: Tile, x: number, y: number, frame: number, r
       rect(c, '#3a9a4a', x + 19, y + 22, 4, 4);
       break;
     }
-    case 'gym': {
-      const dark = ((x / TILE + y / TILE + seed) | 0) % 2 === 0;
-      rect(c, dark ? '#7a8a9c' : '#8fa0b3', x, y, TILE, TILE);
-      rect(c, '#6a7a8c', x, y, TILE, 1);
-      rect(c, '#6a7a8c', x, y, 1, TILE);
+    case 'gym': gymFloor(c, x, y, seed, region); break;
+    case 'pillar': {
+      gymFloor(c, x, y, seed, region);
+      disc(c, 'rgba(0,0,0,0.25)', x + 16, y + 28, 11);
+      if (region === 'meadow') {
+        rect(c, '#6a4020', x + 7, y + 18, 18, 12); rect(c, '#9a6334', x + 8, y + 19, 16, 3);
+        disc(c, '#246a30', x + 16, y + 12, 11); disc(c, '#3a9a4a', x + 15, y + 11, 9);
+        disc(c, '#6cc87a', x + 12, y + 8, 4); rect(c, '#f283c1', x + 19, y + 9, 3, 3); rect(c, '#f7d340', x + 11, y + 14, 2, 2);
+      } else if (region === 'desert') {
+        rect(c, '#7a4a28', x + 8, y + 2, 16, 29); rect(c, '#e0b070', x + 9, y + 3, 14, 27);
+        rect(c, '#f4d49a', x + 10, y + 3, 4, 27); rect(c, '#b88850', x + 19, y + 3, 3, 27);
+        rect(c, '#7a4a28', x + 6, y + 2, 20, 3); rect(c, '#7a4a28', x + 6, y + 27, 20, 4);
+        rect(c, '#c27a44', x + 14, y + 12, 4, 6);
+      } else if (region === 'snow') {
+        rect(c, '#4f8ab0', x + 6, y + 4, 20, 26); rect(c, '#bfe6f5', x + 7, y + 5, 18, 24);
+        rect(c, '#e6f7fc', x + 8, y + 6, 6, 22); rect(c, '#8cc6e0', x + 19, y + 5, 5, 24);
+        rect(c, '#ffffff', x + 9, y + 8, 2, 8); rect(c, '#ffffff', x + 16, y + 20, 5, 1);
+      } else {
+        rect(c, '#14100f', x + 7, y + 16, 18, 14); rect(c, '#3a2c28', x + 8, y + 17, 16, 3);
+        const f = frame ? 2 : 0;
+        disc(c, '#e8481c', x + 16, y + 11 - f, 6); disc(c, '#ffb02e', x + 16, y + 12 - f, 4);
+        rect(c, '#fff2a8', x + 15, y + 11 - f, 2, 3); rect(c, '#e8481c', x + 12 + f, y + 3, 2, 3);
+      }
+      break;
+    }
+    case 'marble': {
+      const dark = seed % 2 === 0;
+      rect(c, dark ? '#e8e2f0' : '#f6f2fa', x, y, TILE, TILE);
+      rect(c, '#cfc6dc', x + 4 + (seed % 3) * 6, y + 6, 10, 1); rect(c, '#cfc6dc', x + 14, y + 7, 6, 1);
+      rect(c, '#d8b84a', x, y, TILE, 1); rect(c, '#d8b84a', x, y, 1, TILE);
+      if (dark) { rect(c, '#d8b84a', x + 14, y + 14, 4, 4); rect(c, '#f4dc7a', x + 15, y + 15, 2, 2); }
       break;
     }
     case 'iwall': {

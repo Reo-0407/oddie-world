@@ -33,7 +33,7 @@ describe('저장', () => {
     expect(parseSave(old)).toEqual({
       ...newSave('준우', 3),
       coins: 0, // 옛 저장은 시작 코인을 받지 않는다
-      team: [{ speciesId: 42, level: 10, exp: 0 }],
+      team: [{ speciesId: 42, level: 5, exp: 0 }], // 스타터 레벨(START_LEVEL)
       dex: { seen: [42], caught: [42] }, // 옛 저장은 팀의 오디를 잡은 것으로 채운다
     });
     expect(loadSave(fakeStorage({ [SAVE_KEY]: old }))?.ropes).toEqual({ basic: 5, sturdy: 1 });

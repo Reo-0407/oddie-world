@@ -501,3 +501,26 @@ footer {
 .look-pick button { padding: 4px; min-height: 48px; border-radius: 10px; display: grid; place-items: center; }
 .look-pick button.selected { background: #fff3c4; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .look-preview { display: block; margin: 0 auto; image-rendering: pixelated; border-radius: 12px; background: #7bbf5a; }
+
+/* ---------- 연구소 스타터 / 상점 / 배지 / 엔딩 ---------- */
+.gv-overlay { position: absolute; inset: 0; z-index: 9; overflow-y: auto; background: rgba(250, 250, 250, 0.96); touch-action: pan-y; display: flex; align-items: center; }
+.gv-overlay .screen { width: 100%; }
+.shop-coins { margin: 0; text-align: center; font-size: 1.1rem; }
+.shop-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.shop-list button { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; text-align: left; border-radius: 12px; padding: 10px 14px; }
+.shop-list button.on { background: #fff3c4; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.shop-list small { grid-column: 1 / -1; opacity: 0.7; font-weight: 500; }
+.shop-name { font-weight: 800; }
+.shop-qty { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.shop-qty button { width: 56px; border-radius: 50%; font-size: 1.4rem; }
+.shop-buy { background: #3a9a4a; color: #fff; }
+.gm-badges { display: flex; gap: 10px; justify-content: center; }
+.gm-badge { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; border: 3px solid #23262b; font-size: 0.7rem; font-weight: 800; color: #fff; text-shadow: 0 1px 2px #0008; }
+.gm-badge.off { background: #d8d8d8 !important; color: #888; text-shadow: none; border-style: dashed; }
+.credits { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; overflow: hidden;
+  background: radial-gradient(circle at 50% 30%, #3a2a6a, #10141a 70%); color: #fff; text-align: center; padding: 24px; }
+.credits-roll { display: flex; flex-direction: column; gap: 14px; max-width: 420px; animation: credits-in 1.2s ease-out both; }
+.credits h1 { font-size: 2rem; color: #ffd24a; margin: 0; text-shadow: 0 0 18px #ffd24a88; }
+.credits p { margin: 0; line-height: 1.6; }
+.credits .credits-small { opacity: 0.75; font-size: 0.85rem; }
+@keyframes credits-in { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: none; } }

@@ -1,16 +1,16 @@
 import { useRef, useState } from 'react';
 import { AuthScreen, ConflictDialog, LookPicker } from './ui/AuthScreen.tsx';
-import { StarterScreen } from './ui/StarterScreen.tsx';
+import { Credits } from './ui/Credits.tsx';
 import { OnlineScreen } from './ui/OnlineScreen.tsx';
 import { useAccountFlow } from './ui/useAccountFlow.ts';
 import { GameView, type EncounterInfo } from './ui/GameView.tsx';
 import { BattleScreen } from './ui/BattleScreen.tsx';
 import { CatchScreen } from './ui/CatchScreen.tsx';
-import { markCaught, markSeen } from './game/dex.ts';
+import { markSeen } from './game/dex.ts';
 import { newSave, START_LEVEL, type SaveData } from './game/save.ts';
 import { settleCatch, settleLoss, settleWin } from './battle/outcome.ts';
 import type { RtResult } from './battle/realtime.ts';
-import { trainerById, type Trainer } from './overworld/encounters.ts';
+import { BADGE_NAMES, BADGE_ORDER, trainerById, type Trainer } from './overworld/encounters.ts';
 import { getMap } from './overworld/maps/index.ts';
 import type { Status } from './engine/types.ts';
 import type { RegionId } from './world/regions.ts';
@@ -33,6 +33,7 @@ export default function App() {
   /** 전투가 끝날 때마다 월드를 새로 그린다(결과 대화를 띄우고, 진 경우 부활 지점에서 시작) */
   const [worldKey, setWorldKey] = useState(0);
   const [pickLook, setPickLook] = useState(0);
+  const [credits, setCredits] = useState(false);
   const dataRef = useRef(data);
   dataRef.current = data;
 
@@ -50,8 +51,31 @@ export default function App() {
     setFight({ stage: 'fight', kind: 'wild', region: info.region, foe: { speciesId: info.speciesId, level: info.level } });
   };
 
-  // 개발 중 콘솔에서 전투를 바로 열어 볼 수 있게 (배포 빌드에는 없다)
-  if (import.meta.env.DEV) (window as unknown as { __encounter?: typeof onEncounter }).__encounter = onEncounter;
+  // 개발 중 콘솔에서 전투·배지·순간이동을 바로 해 볼 수 있게 (배포 빌드에는 없다)
+  if (import.meta.env.DEV) {
+    const w = window as unknown as { __encounter?: typeof onEncounter; __oddie?: unknown };
+    w.__encounter = onEncounter;
+    w.__oddie = {
+      give(badges: string[] = BADGE_ORDER, level?: number) {
+        const d = dataRef.current;
+        if (!d) return;
+        let team = d.team.length ? d.team : [{ speciesId: 1, level: START_LEVEL, exp: 0 }];
+        if (level) team = team.map((o) => ({ ...o, level, exp: 0 }));
+        save({
+          ...d, team, playerLevel: Math.max(...team.map((o) => o.level)),
+          badges: [...new Set([...d.badges, ...badges])], flags: d.flags.includes('starter') ? d.flags : [...d.flags, 'starter'],
+        });
+        backToWorld(null);
+      },
+      warp(map: string, x: number, y: number) {
+        const d = dataRef.current;
+        if (!d || !getMap(map)) return false;
+        save({ ...d, map, x, y });
+        backToWorld(null);
+        return true;
+      },
+    };
+  }
 
   const onTrainer = (id: string) => {
     const d = dataRef.current;
@@ -71,9 +95,20 @@ export default function App() {
       return backToWorld({ pages: s.lines });
     }
     if (fight.kind === 'trainer') {
-      const s = settleWin(d, alive, fight.trainer.team, fight.trainer);
-      save(s.save);
-      return backToWorld({ speaker: fight.trainer.name, pages: [fight.trainer.lines.after, ...s.lines] });
+      const tr = fight.trainer;
+      const s = settleWin(d, alive, tr.team, tr);
+      const pages = [tr.lines.after, ...s.lines];
+      let next = s.save;
+      if (tr.badge && !next.badges.includes(tr.badge)) {
+        next = { ...next, badges: [...next.badges, tr.badge] };
+        pages.push(`${BADGE_NAMES[tr.badge]}를 받았다!`);
+      }
+      if (tr.champion && !next.flags.includes('champion')) {
+        next = { ...next, flags: [...next.flags, 'champion'] };
+        setCredits(true);
+      }
+      save(next);
+      return backToWorld({ speaker: tr.name, pages });
     }
     const s = settleWin(d, alive, [fight.foe]);
     save(s.save);
@@ -97,7 +132,9 @@ export default function App() {
   };
 
   let screen;
-  if (flow.phase === 'booting') {
+  if (credits) {
+    screen = <Credits onClose={() => setCredits(false)} />;
+  } else if (flow.phase === 'booting') {
     screen = <main className="screen"><p className="online-note">불러오는 중…</p></main>;
   } else if (flow.phase === 'auth' || (!data && !account)) {
     screen = (
@@ -115,12 +152,6 @@ export default function App() {
         <LookPicker value={pickLook} onChange={setPickLook} />
         <button className="wide" onClick={() => update(newSave(account!.username, pickLook))}>시작하기</button>
       </main>
-    );
-  } else if (data.team.length === 0) {
-    screen = (
-      <StarterScreen
-        onPick={(id) => update({ ...data, team: [{ speciesId: id, level: START_LEVEL, exp: 0 }], playerLevel: START_LEVEL, dex: markCaught(data.dex, id) })}
-      />
     );
   } else if (online) {
     // 로그인했다면 대전 이름도 계정 아이디로 맞춘다(랭킹의 이름과 어긋나지 않게)

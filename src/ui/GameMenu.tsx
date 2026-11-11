@@ -3,6 +3,9 @@ import { speciesById } from '../data/index.ts';
 import type { SaveData } from '../game/save.ts';
 import { DexOverlay } from './DexOverlay.tsx';
 import { OddieArt } from './OddieArt.tsx';
+import { BADGE_NAMES, BADGE_ORDER } from '../overworld/encounters.ts';
+
+const BADGE_COLORS = { meadow: '#3a9a4a', desert: '#e0892f', snow: '#4ab0d8', volcano: '#c8402a' } as const;
 
 export interface MenuActions {
   /** 로그인한 아이디. 게스트면 null */
@@ -55,7 +58,15 @@ export function GameMenu({ data, actions, onClose }: { data: SaveData; actions: 
     body = (
       <>
         <h2>가방</h2>
+        <div className="gm-badges" aria-label={`배지 ${data.badges.length}개`}>
+          {BADGE_ORDER.map((b) => (
+            <span key={b} className={`gm-badge${data.badges.includes(b) ? '' : ' off'}`} style={{ background: BADGE_COLORS[b] }} title={BADGE_NAMES[b]}>
+              {BADGE_NAMES[b].slice(0, 2)}
+            </span>
+          ))}
+        </div>
         <ul className="gm-bag">
+          <li><span>배지</span><b>{BADGE_ORDER.filter((b) => data.badges.includes(b)).length} / 4</b></li>
           <li><span>코인</span><b>{data.coins}</b></li>
           <li><span>로프</span><b>{data.ropes.basic}</b></li>
           <li><span>튼튼한 로프</span><b>{data.ropes.sturdy}</b></li>

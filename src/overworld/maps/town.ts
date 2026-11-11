@@ -1,4 +1,5 @@
 import type { MapData, Npc } from './types.ts';
+import { GYM_ENTRY } from './house.ts';
 import { building, fill, grid, put, rows } from './util.ts';
 
 const W = 30;
@@ -45,10 +46,11 @@ const signs = [
   { x: 8, y: 17, text: '민수네 집' },
   { x: 15, y: 17, text: '할머니네 집' },
   { x: 19, y: 21, text: '오디 연구소 — 오디의 비밀을 연구하는 곳.' },
-  { x: 27, y: 19, text: '오디 마을 → 동쪽은 1번 길.' },
+  { x: 27, y: 19, text: '오디 마을 → 동쪽은 1번 길, 남쪽은 오디 숲. 처음이라면 먼저 연구소(회색 지붕)에 들러 박사님을 만나세요!' },
 ];
 for (const s of signs) put(g, s.x, s.y, 'Y');
-put(g, 28, 20, ':'); put(g, 29, 20, ':'); put(g, 29, 21, ':');
+put(g, 28, 20, ':'); put(g, 29, 20, ':'); put(g, 29, 21, 'T'); put(g, 28, 21, '.'); put(g, 27, 21, '.');
+fill(g, 16, 21, 1, 3, ':'); // 남쪽 숲으로
 
 const look = (hair: string, shirt: string, pants = '#3a4a8a', hat?: string) => ({ hair, skin: '#f6d2b0', shirt, pants, hat });
 const npcs: Npc[] = [
@@ -59,6 +61,15 @@ const npcs: Npc[] = [
     choice: { options: ['응', '아니'], replies: [['그렇지? 역시 말이 통하는구나!'], ['그래? 그럼 한 바퀴 더 걸어 봐.']] } },
   { id: 'town-oldman', name: '할아버지', x: 25, y: 9, facing: 'left', look: look('#dddddd', '#8a6a4a', '#555555'),
     lines: ['동쪽 1번 길의 풀숲에는 야생 오디가 살아.', '풀숲을 걸으면 오디가 튀어나올지도 몰라.'] },
+  { id: 'town-guide', name: '이웃 누나', x: 8, y: 10, facing: 'left', look: look('#c9822a', '#3f78d8', '#2a3a5a'),
+    lines: ['일어났구나! 박사님이 너를 찾으셨어.', '연구소는 마을 남쪽의 회색 지붕 건물이야. 첫 오디를 주신대!'],
+    linesIf: { flag: 'starter', lines: ['첫 오디가 생겼구나! 정말 귀엽다.', '오디가 지치면 빨간 지붕 오디 센터에서 쉬게 해 줘.'] } },
+  { id: 'town-gate-east', name: '마을 아저씨', x: 28, y: 20, facing: 'left', look: look('#4a3a2a', '#8a6a4a', '#3a3a3a', '#5a4a3a'),
+    lines: ['앗, 잠깐! 오디 없이 풀숲에 가면 위험해.', '먼저 연구소의 박사님을 만나고 와!'],
+    gate: { flag: 'starter', aside: { x: 28, y: 21 }, open: ['오디가 있으니 이제 안심이야. 조심해서 다녀와!'] } },
+  { id: 'town-gate-south', name: '마을 아주머니', x: 16, y: 21, facing: 'up', look: look('#5a3a6a', '#e0892f', '#3a3a5a'),
+    lines: ['숲에는 야생 오디가 잔뜩 있단다.', '연구소에서 오디를 받기 전에는 나갈 수 없어!'],
+    gate: { flag: 'starter', aside: { x: 17, y: 21 }, open: ['숲을 지나면 설원이래. 감기 조심하렴!'] } },
 ];
 
 export const town: MapData = {
@@ -69,12 +80,12 @@ export const town: MapData = {
   warps: [
     { x: center.x, y: center.y, to: { map: 'center', x: 4, y: 6, facing: 'up' } },
     { x: shop.x, y: shop.y, to: { map: 'shop', x: 3, y: 6, facing: 'up' } },
-    { x: gym.x, y: gym.y, to: { map: 'gym', x: 5, y: 10, facing: 'up' } },
+    { x: gym.x, y: gym.y, to: { map: 'gym', ...GYM_ENTRY, facing: 'up' } },
     { x: houseA.x, y: houseA.y, to: { map: 'house1', x: 3, y: 5, facing: 'up' } },
     { x: houseB.x, y: houseB.y, to: { map: 'house2', x: 3, y: 5, facing: 'up' } },
     { x: lab.x, y: lab.y, to: { map: 'lab', x: 4, y: 7, facing: 'up' } },
     { x: 29, y: 20, to: { map: 'route1', x: 1, y: 6, facing: 'right' } },
-    { x: 29, y: 21, to: { map: 'route1', x: 1, y: 7, facing: 'right' } },
+    { x: 16, y: 23, to: { map: 'forest', x: 12, y: 1, facing: 'down' } },
   ],
   npcs,
   signs,

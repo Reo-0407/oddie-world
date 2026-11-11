@@ -97,3 +97,36 @@ export function interactTarget(map: MapData, npcs: readonly Npc[], s: PlayerStat
   }
   return null;
 }
+
+/** 문지기·대사 판단에 쓰는 진행 상황 */
+export interface Progress { badges: readonly string[]; flags: readonly string[] }
+
+/** 팀이 있는 옛 저장은 스타터를 받은 것으로 본다 */
+export const progressOf = (save: { badges: readonly string[]; flags: readonly string[]; team: readonly unknown[] }): Progress => ({
+  badges: save.badges,
+  flags: save.team.length > 0 && !save.flags.includes('starter') ? [...save.flags, 'starter'] : save.flags,
+});
+
+/** 문지기가 길을 비켜 주나(문지기가 아니면 true) */
+export function gateOpen(npc: Pick<Npc, 'gate'>, p: Progress): boolean {
+  const g = npc.gate;
+  if (!g) return true;
+  return (g.badges ?? []).every((b) => p.badges.includes(b)) && (!g.flag || p.flags.includes(g.flag));
+}
+
+/** 진행 상황에 맞춘 NPC 위치: 열린 문지기는 aside 칸으로 비켜선다 */
+export const placeNpcs = (map: MapData, p: Progress): Npc[] =>
+  map.npcs.map((n) => (n.gate && gateOpen(n, p) ? { ...n, x: n.gate.aside.x, y: n.gate.aside.y } : n));
+
+/** 말을 걸었을 때의 대사 */
+export function npcLines(npc: Npc, p: Progress): string[] {
+  if (npc.gate) return gateOpen(npc, p) ? npc.gate.open : npc.lines;
+  if (npc.linesIf && p.flags.includes(npc.linesIf.flag)) return npc.linesIf.lines;
+  return npc.lines;
+}
+
+/** 실내 지도에서 나가는 칸(첫 워프의 도착지) = 오디 센터 부활 지점 */
+export const exitOf = (map: MapData): { map: string; x: number; y: number } | null => {
+  const w = map.warps[0];
+  return w ? { map: w.to.map, x: w.to.x, y: w.to.y } : null;
+};

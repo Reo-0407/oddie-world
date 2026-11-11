@@ -37,7 +37,7 @@ describe('성장', () => {
     expect(expToNext(11)).toBeGreaterThan(expToNext(10));
   });
   it('경험치와 코인은 등급이 높을수록 많다', () => {
-    expect(gainExp(10, 'Common')).toBe(90);
+    expect(gainExp(10, 'Common')).toBe(120);
     expect(gainExp(10, 'Legendary')).toBeGreaterThan(gainExp(10, 'Rare'));
     expect(coinReward(10, 'Common')).toBe(40);
   });
@@ -76,9 +76,9 @@ describe('전투 정산', () => {
   const team: OwnedOddie[] = [{ speciesId: 1, level: 10, exp: 100 }, { speciesId: 2, level: 10, exp: 0 }];
   it('이기면 살아 있는 오디만 경험치, 코인 지급', () => {
     const report = settleBattle({ outcome: 'won', team, box: [], alive: [true, false], wildSpeciesId: 1, wildLevel: 10 });
-    expect(report.exp).toBe(90);
+    expect(report.exp).toBe(120);
     expect(report.coins).toBe(40);
-    expect(report.team[0]).toMatchObject({ level: 11, exp: 60 });
+    expect(report.team[0]).toMatchObject({ level: 11, exp: 90 });
     expect(report.team[1]).toEqual(team[1]);
     expect(report.levelUps).toHaveLength(1);
     expect(report.levelUps[0]).toMatchObject({ from: 10, to: 11 });

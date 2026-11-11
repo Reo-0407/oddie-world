@@ -102,7 +102,7 @@ describe('서버에서 온 저장은 믿지 않는다', () => {
   it('올바른 v3 저장은 통과, 옛 형식은 옮기고, 이상한 값은 거절', () => {
     const good = { ...newSave('가', 1), team: [{ speciesId: 2, level: 5, exp: 0 }] };
     expect(parseCloudData(JSON.parse(JSON.stringify(good)))).toEqual(good);
-    expect(parseCloudData({ name: '옛', characterIndex: 1, starterId: 42 })?.team).toEqual([{ speciesId: 42, level: 10, exp: 0 }]);
+    expect(parseCloudData({ name: '옛', characterIndex: 1, starterId: 42 })?.team).toEqual([{ speciesId: 42, level: 5, exp: 0 }]);
     for (const bad of [null, 'text', 5, { version: 99, name: 'a', characterIndex: 0 }, { name: '', characterIndex: 0 }]) {
       expect(parseCloudData(bad as never), JSON.stringify(bad)).toBeNull();
     }

@@ -6,7 +6,7 @@ export const SAVE_AT_KEY = 'oddie-world-save-at'; // 이 기기에서 마지막�
 export const OWNER_KEY = 'oddie-world-owner'; // 이 기기의 저장이 누구 것인지(계정 id, 게스트면 'guest')
 export const SAVE_VERSION = 5;
 export const CHARACTER_COUNT = 6; // 옛 저장(0~3)도 그대로 유효
-export const START_LEVEL = 10;
+export const START_LEVEL = 5;
 /** 새 저장의 시작 코인 (옛 저장을 옮길 때는 적용하지 않는다) */
 export const START_COINS = 100;
 export const START_ROPES = { basic: 5, sturdy: 1 };
