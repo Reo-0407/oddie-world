@@ -4,7 +4,7 @@ import { deleteCloudSave, fetchCloudSave, uploadCloudSave } from '../online/clou
 import { decideSync, withMergedDex, type SaveSide } from '../online/saveSync.ts';
 import {
   clearLocalAccountData, clearSave, loadOwner, loadSave, loadSaveAt, setOwner, writeSave, type SaveData,
-} from '../world/save.ts';
+} from '../game/save.ts';
 
 const GUEST_KEY = 'oddie-guest';
 const UPLOAD_DELAY_MS = 3000; // 저장이 바뀐 뒤 이만큼 조용하면 올린다

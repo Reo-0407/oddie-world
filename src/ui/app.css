@@ -413,3 +413,60 @@ footer {
 .b-bottom .message { padding: 4px 8px; font-size: 0.9rem; }
 .move-wrap .move { min-height: 52px; }
 .b-plate { border-radius: 12px; }
+
+/* ---------- 2D 월드 (GameView) ---------- */
+.gv {
+  position: relative;
+  width: 100%;
+  max-width: 960px;
+  height: calc(100dvh - 120px);
+  min-height: 320px;
+  max-height: 720px;
+  margin: 0 auto;
+  background: #10141a;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: contain;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.gv-canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; touch-action: none; }
+.gv-title {
+  position: absolute; top: 8px; left: 8px; padding: 4px 10px;
+  background: rgba(16, 20, 26, 0.75); color: #fff; border: 2px solid #fff; border-radius: 6px;
+  font-size: 0.85rem; font-weight: 700; pointer-events: none;
+}
+.dialog {
+  position: absolute; left: 8px; right: 8px; bottom: 8px; min-height: 84px; padding: 12px 16px 14px;
+  background: #fffdf4; color: #23262b; border: 4px solid #23262b; border-radius: 10px;
+  box-shadow: 0 0 0 3px #fffdf4, 0 0 0 5px #23262b; z-index: 5; font-size: 1.05rem; line-height: 1.5;
+}
+.dialog-name { position: absolute; top: -16px; left: 12px; padding: 1px 10px; background: #23262b; color: #fff; border-radius: 6px; font-size: 0.8rem; font-weight: 700; }
+.dialog-text { margin: 0; min-height: 3em; white-space: pre-wrap; }
+.dialog-next { position: absolute; right: 14px; bottom: 6px; animation: gv-blink 0.8s steps(2) infinite; }
+.dialog-choices { position: absolute; right: 10px; bottom: calc(100% + 8px); margin: 0; padding: 6px; list-style: none; background: #fffdf4; border: 4px solid #23262b; border-radius: 8px; min-width: 96px; }
+.dialog-choices li { padding: 8px 12px 8px 22px; min-height: 40px; cursor: pointer; font-weight: 700; position: relative; }
+.dialog-choices li.on::before { content: '▶'; position: absolute; left: 4px; }
+@keyframes gv-blink { 50% { opacity: 0; } }
+.gv-pad {
+  position: absolute; left: 12px; bottom: 12px; width: 156px; height: 156px; z-index: 3;
+  display: none; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 2px; touch-action: none;
+}
+.gv-ab { position: absolute; right: 12px; bottom: 16px; z-index: 3; display: none; gap: 14px; align-items: flex-end; touch-action: none; }
+.gv-btn {
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  min-height: 0; padding: 0; border: 3px solid #23262b; background: rgba(255, 255, 255, 0.78); color: #23262b;
+  font-size: 1.3rem; font-weight: 800; opacity: 0.85;
+}
+.gv-btn:active { background: #ffd24a; opacity: 1; }
+.gv-pad .up { grid-column: 2; grid-row: 1; border-radius: 10px 10px 0 0; }
+.gv-pad .left { grid-column: 1; grid-row: 2; border-radius: 10px 0 0 10px; }
+.gv-pad .right { grid-column: 3; grid-row: 2; border-radius: 0 10px 10px 0; }
+.gv-pad .down { grid-column: 2; grid-row: 3; border-radius: 0 0 10px 10px; }
+.gv-a, .gv-b { width: 64px; height: 64px; border-radius: 50%; }
+.gv-a { background: rgba(217, 79, 61, 0.85); color: #fff; margin-bottom: 28px; }
+@media (hover: none), (max-width: 760px) {
+  .gv-pad { display: grid; }
+  .gv-ab { display: flex; }
+  .dialog { bottom: 180px; }
+}

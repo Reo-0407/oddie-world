@@ -9,7 +9,7 @@ import { grantExp, type BattleReport } from '../game/rewards.ts';
 import { withHpRatio } from '../game/tutorial.ts';
 import { joystickToMove } from '../world/math.ts';
 import { MAP_HALF, REGIONS, TOWN_POS } from '../world/regions.ts';
-import { START_LEVEL, type Ropes, type SaveData } from '../world/save.ts';
+import { START_LEVEL, type Ropes, type SaveData } from '../game/save.ts';
 import { WorldScene, type NearbyState, type SceneHooks, type WildInfo } from '../world/scene.ts';
 import { BattleOverlay } from './BattleOverlay.tsx';
 import { DexOverlay } from './DexOverlay.tsx';

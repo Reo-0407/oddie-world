@@ -1,4 +1,4 @@
-import type { Ropes } from '../world/save.ts';
+import type { Ropes } from '../game/save.ts';
 
 export type ShopItem = 'basic' | 'sturdy' | 'potion';
 

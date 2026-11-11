@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newSave, parseSave } from '../world/save.ts';
+import { newSave, parseSave } from '../game/save.ts';
 import { decideSync, withMergedDex } from '../online/saveSync.ts';
 import { dexMilestoneReward, cleanDex, dexFromOwned, dexProgress, dexStatus, emptyDex, markCaught, markSeen, mergeDex } from './dex.ts';
 

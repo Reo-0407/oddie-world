@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clearLocalAccountData, loadOwner, loadSaveAt, newSave, SAVE_KEY, setOwner, writeSave } from '../world/save.ts';
+import { clearLocalAccountData, loadOwner, loadSaveAt, newSave, SAVE_KEY, setOwner, writeSave } from '../game/save.ts';
 import {
   authErrorMessage, canonicalUsername, emailToUsername, FAKE_EMAIL_DOMAIN, usernameToEmail, validatePassword, validateUsername,
 } from './account.ts';

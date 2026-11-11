@@ -4,9 +4,9 @@ import { CharacterScreen } from './ui/CharacterScreen.tsx';
 import { StarterScreen } from './ui/StarterScreen.tsx';
 import { OnlineScreen } from './ui/OnlineScreen.tsx';
 import { useAccountFlow } from './ui/useAccountFlow.ts';
-import { WorldView } from './ui/WorldView.tsx';
+import { GameView } from './ui/GameView.tsx';
 import { markCaught } from './game/dex.ts';
-import { newSave, START_LEVEL } from './world/save.ts';
+import { newSave, START_LEVEL } from './game/save.ts';
 import './ui/app.css';
 
 export default function App() {
@@ -46,7 +46,12 @@ export default function App() {
   } else {
     screen = (
       <>
-        <WorldView data={data} onData={update} />
+        <GameView
+          data={data}
+          onData={update}
+          onEncounter={(info) => console.log('encounter', info)}
+          onTrainer={(id) => console.log('trainer', id)}
+        />
         <div className="world-bar">
           <span className="account-name">{account ? `아이디: ${account.username}` : '게스트'}</span>
           <button onClick={() => setOnline(true)}>친구 대전</button>

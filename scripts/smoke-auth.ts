@@ -6,7 +6,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { authErrorMessage, emailToUsername, usernameToEmail } from '../src/online/account.ts';
 import { MAX_SAVE_BYTES, parseCloudData } from '../src/online/saveSync.ts';
-import { newSave } from '../src/world/save.ts';
+import { newSave } from '../src/game/save.ts';
 import { loadEnvLocal } from './env.ts';
 
 const env = loadEnvLocal();

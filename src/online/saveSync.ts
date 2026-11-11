@@ -1,5 +1,5 @@
 import { mergeDex } from '../game/dex.ts';
-import { parseSave, type SaveData } from '../world/save.ts';
+import { parseSave, type SaveData } from '../game/save.ts';
 
 /** 클라우드 저장 한 건의 크기 상한(서버 표의 CHECK와 같은 값) */
 export const MAX_SAVE_BYTES = 200 * 1024;

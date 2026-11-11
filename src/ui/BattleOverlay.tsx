@@ -8,7 +8,7 @@ import { settleBattle, type BattleReport } from '../game/rewards.ts';
 import { ITEM_NAMES, potionHeal } from '../game/shop.ts';
 import { battleOutcome, tutorialHint } from '../game/tutorial.ts';
 import type { WorldScene } from '../world/scene.ts';
-import type { Ropes } from '../world/save.ts';
+import type { Ropes } from '../game/save.ts';
 import { moveDetail, moveSummary, powerText } from './moveText.ts';
 import { typeColor } from './OddieArt.tsx';
 import { useBattle } from './useBattle.ts';

@@ -1,4 +1,4 @@
-import type { SaveData } from '../world/save.ts';
+import type { SaveData } from '../game/save.ts';
 import { parseCloudData, withinSizeLimit, type SaveSide } from './saveSync.ts';
 import { getSupabase } from './supabaseTransport.ts';
 

@@ -18,7 +18,7 @@ import {
   blendHex, clampToMap, MAP_HALF, pickSpeciesForRegion, REGION_IDS, REGIONS, regionAt, regionWeights, START_POS, TOWN_POS,
   type RegionId, type SpawnCandidate,
 } from './regions.ts';
-import type { Ropes } from './save.ts';
+import type { Ropes } from '../game/save.ts';
 import { MODEL_SPECIES_IDS, wildLevel } from './spawns.ts';
 import { stepChase, stepWander, type WanderState } from './wander.ts';
 
