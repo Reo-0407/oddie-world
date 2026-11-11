@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AuthScreen, ConflictDialog, LookPicker } from './ui/AuthScreen.tsx';
 import { Credits } from './ui/Credits.tsx';
 import { OnlineScreen } from './ui/OnlineScreen.tsx';
@@ -6,6 +6,9 @@ import { useAccountFlow } from './ui/useAccountFlow.ts';
 import { GameView, type EncounterInfo } from './ui/GameView.tsx';
 import { BattleScreen } from './ui/BattleScreen.tsx';
 import { CatchScreen } from './ui/CatchScreen.tsx';
+import { TitleBackdrop, TitleScreen } from './ui/TitleScreen.tsx';
+import { playMusic, sfx } from './audio/audio.ts';
+import type { TrackId } from './audio/tracks.ts';
 import { markSeen } from './game/dex.ts';
 import { newSave, START_LEVEL, type SaveData } from './game/save.ts';
 import { settleCatch, settleLoss, settleWin } from './battle/outcome.ts';
@@ -23,6 +26,10 @@ type Fight =
   | { stage: 'catch'; region: RegionId; foe: Foe; status: Status | null; lines: string[] };
 
 type Message = { speaker?: string; pages: string[] } | null;
+type Wipe = { kind: 'wild' | 'trainer' | 'fade'; phase: 'in' | 'out'; key: number };
+/** 화면을 덮는 데 걸리는 시간(ms). 덮인 동안 화면을 바꾸고 걷어 낸다 */
+const WIPE_IN = { wild: 560, trainer: 620, fade: 320 } as const;
+const WIPE_OUT = 420;
 
 export default function App() {
   const flow = useAccountFlow();
@@ -34,21 +41,48 @@ export default function App() {
   const [worldKey, setWorldKey] = useState(0);
   const [pickLook, setPickLook] = useState(0);
   const [credits, setCredits] = useState(false);
+  const [titled, setTitled] = useState(false);
+  const [wipe, setWipe] = useState<Wipe | null>(null);
+  const wiping = useRef(false);
   const dataRef = useRef(data);
   dataRef.current = data;
 
+  /** 화면 전환: 덮고(kind별 그림) → then() → 걷어 낸다 */
+  const transition = (kind: Wipe['kind'], then: () => void) => {
+    if (wiping.current) return;
+    wiping.current = true;
+    const key = Date.now();
+    setWipe({ kind, phase: 'in', key });
+    window.setTimeout(() => {
+      then();
+      wiping.current = false;
+      setWipe({ kind, phase: 'out', key });
+      window.setTimeout(() => setWipe((w) => (w?.key === key ? null : w)), WIPE_OUT);
+    }, WIPE_IN[kind]);
+  };
+
+  // 버튼을 누르면 작게 딸깍(메뉴 버튼처럼 따로 소리 내는 것은 data-nosfx)
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const b = (e.target as HTMLElement | null)?.closest?.('button');
+      if (b && !b.disabled && !b.closest('[data-nosfx]')) sfx('confirm');
+    };
+    window.addEventListener('click', onClick, true);
+    return () => window.removeEventListener('click', onClick, true);
+  }, []);
+
   const save = (next: SaveData) => { dataRef.current = next; update(next); };
-  const backToWorld = (msg: Message) => {
+  const backToWorld = (msg: Message) => transition('fade', () => {
     setFight(null);
     setMessage(msg && msg.pages.length ? msg : null);
     setWorldKey((k) => k + 1);
-  };
+  });
 
   const onEncounter = (info: EncounterInfo) => {
     const d = dataRef.current;
-    if (!d || d.team.length === 0) return; // 스타터가 없으면 조우도 없다
+    if (!d || d.team.length === 0 || wiping.current) return; // 스타터가 없으면 조우도 없다
     save({ ...d, dex: markSeen(d.dex, info.speciesId) });
-    setFight({ stage: 'fight', kind: 'wild', region: info.region, foe: { speciesId: info.speciesId, level: info.level } });
+    transition('wild', () => setFight({ stage: 'fight', kind: 'wild', region: info.region, foe: { speciesId: info.speciesId, level: info.level } }));
   };
 
   // 개발 중 콘솔에서 전투·배지·순간이동을 바로 해 볼 수 있게 (배포 빌드에는 없다)
@@ -80,9 +114,9 @@ export default function App() {
   const onTrainer = (id: string) => {
     const d = dataRef.current;
     const trainer = trainerById(id);
-    if (!d || !trainer || d.team.length === 0) return;
+    if (!d || !trainer || d.team.length === 0 || wiping.current) return;
     save({ ...d, dex: trainer.team.reduce((dex, m) => markSeen(dex, m.speciesId), d.dex) });
-    setFight({ stage: 'fight', kind: 'trainer', region: getMap(d.map)?.region ?? 'meadow', trainer });
+    transition('trainer', () => setFight({ stage: 'fight', kind: 'trainer', region: getMap(d.map)?.region ?? 'meadow', trainer }));
   };
 
   const onBattleEnd = (result: RtResult, alive: boolean[], foeStatus: Status | null) => {
@@ -113,7 +147,8 @@ export default function App() {
     const s = settleWin(d, alive, [fight.foe]);
     save(s.save);
     if (s.save.ropes.basic + s.save.ropes.sturdy > 0) {
-      setFight({ stage: 'catch', region: fight.region, foe: fight.foe, status: foeStatus, lines: s.lines });
+      const f = fight;
+      transition('fade', () => setFight({ stage: 'catch', region: f.region, foe: f.foe, status: foeStatus, lines: s.lines }));
     } else {
       backToWorld({ pages: [...s.lines, '로프가 없어서 잡을 수 없었다…'] });
     }
@@ -131,27 +166,39 @@ export default function App() {
     backToWorld({ pages: fight.lines });
   };
 
+  // 지금 화면에 맞는 배경음악
+  let music: TrackId = 'title';
+  if (!titled || !data || online || flow.phase !== 'ready') music = 'title';
+  else if (fight?.stage === 'fight') music = fight.kind === 'wild' ? 'wild' : fight.trainer.champion ? 'champion' : 'trainer';
+  else music = getMap(data.map)?.region ?? 'meadow';
+  useEffect(() => { playMusic(music); }, [music]);
+
+  /** 타이틀·로그인 화면은 흘러가는 초원 위에 */
+  const scene = (body: React.ReactNode) => <div className="title-scene"><TitleBackdrop />{body}</div>;
+
   let screen;
-  if (credits) {
+  if (!titled) {
+    screen = <TitleScreen onStart={() => setTitled(true)} />;
+  } else if (credits) {
     screen = <Credits onClose={() => setCredits(false)} />;
   } else if (flow.phase === 'booting') {
-    screen = <main className="screen"><p className="online-note">불러오는 중…</p></main>;
+    screen = scene(<main className="screen auth"><p className="online-note">불러오는 중…</p></main>);
   } else if (flow.phase === 'auth' || (!data && !account)) {
-    screen = (
+    screen = scene(
       <AuthScreen
         onLogin={(who) => { void flow.login(who); }}
         onSignedUp={(who, look) => { void flow.signup(who, look); }}
         onCancel={flow.authCancelable ? flow.cancelAuth : undefined}
-      />
+      />,
     );
   } else if (!data) {
     // 계정은 있는데 저장이 없다(처음부터 / 다른 기기에서 지움): 캐릭터만 다시 고른다
-    screen = (
+    screen = scene(
       <main className="screen auth">
         <h1>캐릭터를 골라 줘!</h1>
         <LookPicker value={pickLook} onChange={setPickLook} />
         <button className="wide" onClick={() => update(newSave(account!.username, pickLook))}>시작하기</button>
-      </main>
+      </main>,
     );
   } else if (online) {
     // 로그인했다면 대전 이름도 계정 아이디로 맞춘다(랭킹의 이름과 어긋나지 않게)
@@ -208,6 +255,12 @@ export default function App() {
   return (
     <>
       {screen}
+      {wipe && (
+        <div key={wipe.key} className={`wipe wipe-${wipe.kind} ${wipe.phase}`} aria-hidden>
+          {wipe.kind === 'wild' && Array.from({ length: 8 }, (_, i) => <i key={i} style={{ '--i': i } as React.CSSProperties} />)}
+          {wipe.kind === 'trainer' && <b />}
+        </div>
+      )}
       {flow.conflict && (
         <ConflictDialog
           local={flow.conflict.local}

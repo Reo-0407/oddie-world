@@ -21,7 +21,18 @@
 .rt-left i.on { background: #ef4b3c; }
 .rt-foe { position: absolute; left: 50%; top: 36%; transform: translate(-50%, -50%); width: 220px; height: 220px; pointer-events: none; }
 .rt-me { position: absolute; left: 6%; bottom: 150px; width: 140px; height: 140px; pointer-events: none; }
-.rt-me.dodge { animation: rt-dodge 0.5s ease-out; }
+.rt-dodge { animation: rt-dodge 0.5s ease-out; }
+/* 등장: 상대는 위에서 떨어져 통통, 내 오디는 왼쪽에서 미끄러져 들어온다 */
+.rt-enter-foe { animation: rt-drop 0.75s cubic-bezier(.3,.7,.4,1) both; }
+@keyframes rt-drop {
+  0% { transform: translateY(-110vh); }
+  55% { transform: translateY(0) scale(1.08, 0.88); }
+  70% { transform: translateY(-26px) scale(0.96, 1.05); }
+  85% { transform: translateY(0) scale(1.03, 0.97); }
+  100% { transform: none; }
+}
+.rt-enter-me { animation: rt-slide 0.6s 0.15s cubic-bezier(.2,.8,.3,1.15) both; }
+@keyframes rt-slide { from { transform: translateX(-120vw); } to { transform: none; } }
 @keyframes rt-dodge { 30% { transform: translateX(70px) rotate(8deg); opacity: 0.6; } }
 .rt-shadow { position: absolute; left: 10%; right: 10%; bottom: -14px; height: 34px; border-radius: 50%; background: radial-gradient(rgba(0,0,0,.35), rgba(0,0,0,0) 70%); }
 .rt-shadow.small { bottom: -10px; height: 24px; }
@@ -46,7 +57,7 @@
 @keyframes rt-flash { from { opacity: 0.95; } to { opacity: 0; } }
 .rt-wave { position: absolute; left: 50%; top: 40%; width: 80px; height: 80px; margin: -40px 0 0 -40px; border: 10px solid; border-radius: 50%; pointer-events: none; z-index: 4; animation: rt-wave 0.7s ease-out forwards; }
 @keyframes rt-wave { from { transform: scale(0.2); opacity: 1; } to { transform: scale(9); opacity: 0; } }
-.rt-banner { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); padding: 8px 18px; border-radius: 20px; background: rgba(35,38,43,.82); color: #fff; font-weight: 800; white-space: nowrap; z-index: 5; pointer-events: none; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis; }
+.rt-banner { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); padding: 10px 22px; border-radius: 14px; background: #fff; color: #23262b; border: 4px solid #23262b; box-shadow: 0 0 0 3px #fff, 0 6px 14px rgba(0,0,0,.35); font-size: 1.1rem; animation: rt-banner 0.35s cubic-bezier(.2,.9,.3,1.3) both; white-space: nowrap; z-index: 5; pointer-events: none; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis; }
 .rt-bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 12px 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .rt-charged { display: flex; gap: 14px; }
 .rt-chg { position: relative; width: 84px; height: 84px; border-radius: 50%; border: 3px solid #fff; overflow: hidden; padding: 0; color: #fff; font-weight: 800; font-size: 0.78rem;
@@ -82,3 +93,12 @@
 .catch-ropes { position: absolute; left: 0; right: 0; bottom: 12px; display: flex; gap: 10px; justify-content: center; }
 .catch-ropes button { padding: 0 16px; border-radius: 24px; border: 2px solid #23262b; background: rgba(255,255,255,.9); font-weight: 700; }
 .catch-ropes button.on { background: #ffd24a; }
+@keyframes rt-banner { from { transform: translateX(-50%) scale(0.4); opacity: 0; } }
+.rt-plate { border: 3px solid #23262b; }
+.rt-tools button, .catch-ropes button { box-shadow: 0 3px 0 #23262b; }
+.rt-tools button:active, .catch-ropes button:active { transform: translateY(2px); box-shadow: 0 1px 0 #23262b; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rt-enter-foe, .rt-enter-me, .rt-banner, .rt-dodge, .rt-wave, .rt-flash { animation-duration: 0.01ms; animation-delay: 0s; }
+  .rt.warn { animation: none; }
+}

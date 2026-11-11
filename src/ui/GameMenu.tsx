@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { speciesById } from '../data/index.ts';
 import type { SaveData } from '../game/save.ts';
 import { DexOverlay } from './DexOverlay.tsx';
-import { OddieArt } from './OddieArt.tsx';
+import { OddieArt, typeColor } from './OddieArt.tsx';
+import { SoundToggle } from './SoundToggle.tsx';
+import { expToNext, MAX_LEVEL } from '../game/growth.ts';
 import { BADGE_NAMES, BADGE_ORDER } from '../overworld/encounters.ts';
 
-const BADGE_COLORS = { meadow: '#3a9a4a', desert: '#e0892f', snow: '#4ab0d8', volcano: '#c8402a' } as const;
+export const BADGE_COLORS = { meadow: '#3a9a4a', desert: '#e0892f', snow: '#4ab0d8', volcano: '#c8402a' } as const;
 
 export interface MenuActions {
   /** 로그인한 아이디. 게스트면 null */
@@ -44,10 +46,18 @@ export function GameMenu({ data, actions, onData, onClose }: { data: SaveData; a
         <div className="gm-team">
           {data.team.map((o, i) => {
             const sp = speciesById(o.speciesId);
+            const a = typeColor(sp.types[0]);
+            const b = typeColor(sp.types[1] ?? sp.types[0]);
+            const exp = o.level >= MAX_LEVEL ? 1 : Math.min(1, o.exp / expToNext(o.level));
             return (
-              <button key={i} type="button" className={`gm-mon${picked === i ? ' on' : ''}`} aria-pressed={picked === i} onClick={() => setPicked(picked === i ? null : i)}>
+              <button
+                key={i} type="button" className={`gm-mon${picked === i ? ' on' : ''}`} aria-pressed={picked === i}
+                style={{ background: `linear-gradient(160deg, ${a}, ${b})` }} onClick={() => setPicked(picked === i ? null : i)}
+              >
+                {i === 0 && <em className="gm-lead">선두</em>}
                 <OddieArt speciesId={o.speciesId} name={sp.name} types={sp.types} size={56} />
-                <b>{sp.name}</b><span>Lv.{o.level}{i === 0 ? ' · 앞' : ''}</span>
+                <b>{sp.name}</b><span>Lv.{o.level}</span>
+                <span className="gm-exp" aria-label={`경험치 ${Math.round(exp * 100)}%`}><i style={{ width: `${exp * 100}%` }} /></span>
               </button>
             );
           })}
@@ -117,9 +127,9 @@ export function GameMenu({ data, actions, onData, onClose }: { data: SaveData; a
   } else {
     body = (
       <div className="gm-grid">
-        {ITEMS.map((it) => (
+        {ITEMS.map((it, i) => (
           <button
-            key={it.id} type="button" className="gm-item"
+            key={it.id} type="button" className="gm-item" style={{ '--i': i } as React.CSSProperties}
             onClick={() => { setPicked(null); if (it.id === 'online') actions.onOnline(); else setPanel(it.id); }}
           >
             <span className="gm-icon" style={{ background: it.color }} aria-hidden>{it.icon}</span>
@@ -131,8 +141,9 @@ export function GameMenu({ data, actions, onData, onClose }: { data: SaveData; a
   }
   return (
     <div className="gm" role="dialog" aria-label="메뉴" onPointerDown={(e) => e.stopPropagation()}>
-      <div className="gm-body">{body}</div>
-      <button type="button" className="gm-close" aria-label="닫기" onClick={onClose}>✕</button>
+      <SoundToggle className="corner" />
+      <div key={panel} className="gm-body">{body}</div>
+      <button type="button" className="gm-close" aria-label="닫기" data-nosfx onClick={onClose}>✕</button>
     </div>
   );
 }

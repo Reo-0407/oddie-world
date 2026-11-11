@@ -7,6 +7,7 @@ import { createRng } from '../engine/rng.ts';
 import type { Status, TypeName } from '../engine/types.ts';
 import { REGIONS, type RegionId } from '../overworld/regions.ts';
 import { OddieArt, typeColor } from './OddieArt.tsx';
+import { jingle, sfx } from '../audio/audio.ts';
 import './battle.css';
 
 interface Props {
@@ -71,9 +72,13 @@ export function BattleScreen({ kind, region, team, foes, trainerName, onEnd }: P
             const extra = e.critical ? ' 급소!' : e.effectiveness > 1 ? ' 효과 굉장!' : e.effectiveness > 0 && e.effectiveness < 1 ? ' 별로…' : e.effectiveness === 0 ? ' 효과 없음' : '';
             add.push({ id: popId += 1, side: e.side, text: `-${e.amount}${extra}`, cls: e.dodged ? 'dodged' : e.charged ? 'big' : '' });
             setFx((f) => (e.side === 'foe' ? { ...f, foeHit: f.foeHit + 1 } : { ...f, meHit: f.meHit + 1 }));
+            sfx(e.effectiveness > 1 && !e.dodged ? 'super' : 'hit');
           } else if (e.t === 'charged') {
             setFx((f) => ({ ...f, flash: f.flash + 1, wave: f.wave + 1, waveColor: typeColor(e.type as TypeName) }));
+            sfx('charge');
             add.push({ id: popId += 1, side: e.side === 'me' ? 'foe' : 'me', text: e.move, cls: 'move' });
+          } else if (e.t === 'faint') {
+            sfx('faint');
           } else if (e.t === 'dodge') {
             setFx((f) => ({ ...f, dodge: f.dodge + 1 }));
           } else if (e.t === 'status') {
@@ -90,6 +95,8 @@ export function BattleScreen({ kind, region, team, foes, trainerName, onEnd }: P
           } else if (e.t === 'end') {
             ended = true;
             const r = e.result;
+            if (r === 'won') jingle('victory');
+            else if (r === 'fled') sfx('flee');
             setBanner(r === 'won' ? '이겼다!' : r === 'lost' ? '졌다…' : '무사히 도망쳤다!');
             const final = cur;
             setTimeout(() => endRef.current(r, aliveMine(final), activeOf(final, 'foe').mon.status), 1300);
@@ -187,19 +194,25 @@ export function BattleScreen({ kind, region, team, foes, trainerName, onEnd }: P
       <div className="rt-foe">
         <div className="rt-shadow" />
         {state.telegraph && <div className="rt-bang">!</div>}
-        <div key={`f${fx.foeHit}`} className={`rt-sprite${fx.foeHit ? ' hit' : ''}`}>
-          <div className={`rt-bob${foe.mon.hp <= 0 ? ' down' : ''}`}>
-            <OddieArt key={foe.mon.speciesId + state.foeActive * 1000} speciesId={foe.mon.speciesId} name={foe.mon.name} types={foe.mon.types} size={220} />
+        <div key={`fe${state.foeActive}`} className="rt-enter-foe">
+          <div key={`f${fx.foeHit}`} className={`rt-sprite${fx.foeHit ? ' hit' : ''}`}>
+            <div className={`rt-bob${foe.mon.hp <= 0 ? ' down' : ''}`}>
+              <OddieArt key={foe.mon.speciesId + state.foeActive * 1000} speciesId={foe.mon.speciesId} name={foe.mon.name} types={foe.mon.types} size={220} />
+            </div>
           </div>
         </div>
         {pops.filter((p) => p.side === 'foe').map((p) => <span key={p.id} className={`rt-pop ${p.cls}`}>{p.text}</span>)}
       </div>
 
-      <div key={`d${fx.dodge}`} className={`rt-me${fx.dodge ? ' dodge' : ''}`}>
+      <div className="rt-me">
         <div className="rt-shadow small" />
-        <div key={`m${fx.meHit}`} className={`rt-sprite${fx.meHit ? ' hit' : ''}`}>
-          <div className="rt-mirror">
-            <OddieArt key={me.mon.speciesId + state.myActive * 1000} speciesId={me.mon.speciesId} name={me.mon.name} types={me.mon.types} size={140} />
+        <div key={`me${state.myActive}`} className="rt-enter-me">
+          <div key={`d${fx.dodge}`} className={fx.dodge ? 'rt-dodge' : ''}>
+            <div key={`m${fx.meHit}`} className={`rt-sprite${fx.meHit ? ' hit' : ''}`}>
+              <div className="rt-mirror">
+                <OddieArt key={me.mon.speciesId + state.myActive * 1000} speciesId={me.mon.speciesId} name={me.mon.name} types={me.mon.types} size={140} />
+              </div>
+            </div>
           </div>
         </div>
         {pops.filter((p) => p.side === 'me').map((p) => <span key={p.id} className={`rt-pop ${p.cls}`}>{p.text}</span>)}
@@ -207,7 +220,7 @@ export function BattleScreen({ kind, region, team, foes, trainerName, onEnd }: P
 
       {fx.flash > 0 && <div key={`fl${fx.flash}`} className="rt-flash" />}
       {fx.wave > 0 && <div key={`w${fx.wave}`} className="rt-wave" style={{ borderColor: fx.waveColor, boxShadow: `0 0 40px ${fx.waveColor}` }} />}
-      {banner && <div className="rt-banner">{banner}</div>}
+      {banner && <div key={banner} className="rt-banner">{banner}</div>}
 
       <div className="rt-bottom" onPointerDown={stop}>
         <div className="rt-charged">

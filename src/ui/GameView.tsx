@@ -17,6 +17,7 @@ import { Dialog, type DialogControl } from './Dialog.tsx';
 import { GameMenu, type MenuActions } from './GameMenu.tsx';
 import { ShopPanel } from './ShopPanel.tsx';
 import { StarterScreen } from './StarterScreen.tsx';
+import { jingle, sfx } from '../audio/audio.ts';
 
 export interface EncounterInfo { speciesId: number; level: number; region: RegionId }
 
@@ -73,6 +74,8 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
   const [overlay, setOverlay] = useState<null | 'shop' | 'starter'>(null);
   const menuRef = useRef(false);
   menuRef.current = menuOpen || overlay !== null;
+  const overlayRef = useRef(overlay);
+  overlayRef.current = overlay;
   const firstMessage = useRef(message);
   const api = useRef<{ press(d: Dir): void; release(d: Dir): void; a(): void; say(pages: string[], speaker?: string): void } | null>(null);
 
@@ -103,6 +106,8 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       held: [] as Dir[],
       triggered: new Set<string>(),
       dialogOpen: false,
+      /** 전투로 넘어가는 중: 더 걷지 않는다 */
+      locked: false,
       key: 0,
     };
 
@@ -139,6 +144,8 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
 
     const setData = (next: SaveData) => { dataRef.current = next; cb.current.onData(next); };
 
+    const fightTrainer = (id: string) => { rt.locked = true; cb.current.onTrainer(id); };
+
     const checkTrainers = () => {
       if (dataRef.current.team.length === 0) return;
       for (const n of npcs) {
@@ -157,7 +164,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       const beaten = dataRef.current.beaten.includes(n.id);
       if (n.trainer) {
         if (beaten) return openDialog({ speaker: n.name, pages: n.trainer.after });
-        return openDialog({ speaker: n.name, pages: n.trainer.before, after: finish(() => { rt.triggered.add(n.id); cb.current.onTrainer(n.id); }) });
+        return openDialog({ speaker: n.name, pages: n.trainer.before, after: finish(() => { rt.triggered.add(n.id); fightTrainer(n.id); }) });
       }
       const p = progressOf(dataRef.current);
       const lines = npcLines(n, p);
@@ -165,6 +172,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         return openDialog({
           speaker: n.name, pages: lines,
           after: finish(() => {
+            jingle('heal');
             rt.heal = { t: 0, done: () => {
               const out = exitOf(map);
               if (out) setData({ ...dataRef.current, respawn: out });
@@ -184,7 +192,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       });
     };
 
-    const idle = () => !rt.anim && !rt.fade && !rt.flash && !rt.heal && !rt.ev && !rt.dialogOpen && !menuRef.current;
+    const idle = () => !rt.locked && !rt.anim && !rt.fade && !rt.flash && !rt.heal && !rt.ev && !rt.dialogOpen && !menuRef.current;
 
     const pressA = () => {
       if (rt.dialogOpen) return control.current?.press();
@@ -200,6 +208,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       if (!r.moved) {
         player.facing = r.state.facing;
         rt.cooldown = 110;
+        sfx('bump');
         persist();
         // 닫힌 문지기에게 부딪히면 말을 건다
         const f = facingTile(player);
@@ -251,14 +260,14 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         rt.ev = null;
         player.facing = OPPOSITE[n.facing];
         persist();
-        openDialog({ speaker: n.name, pages: n.trainer!.before, after: finish(() => cb.current.onTrainer(n.id)) });
+        openDialog({ speaker: n.name, pages: n.trainer!.before, after: finish(() => fightTrainer(n.id)) });
         return;
       }
       if (!canStep(map, npcs.filter((o) => o !== n), f.x, f.y)) {
         // 막히면 그 자리에서 싸움을 건다
         n.bubble = false;
         rt.ev = null;
-        openDialog({ speaker: n.name, pages: n.trainer!.before, after: finish(() => cb.current.onTrainer(n.id)) });
+        openDialog({ speaker: n.name, pages: n.trainer!.before, after: finish(() => fightTrainer(n.id)) });
         return;
       }
       n.anim = { fx: n.x, fy: n.y, t: 0 };
@@ -283,6 +292,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         if (rt.flash.t >= FLASH_MS) {
           const info = rt.flash.info;
           rt.flash = null;
+          rt.locked = true;
           cb.current.onEncounter(info);
         }
       } else if (rt.heal) {
@@ -293,7 +303,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         if (rt.anim.t >= STEP_MS) finishStep();
       } else if (rt.ev) {
         updateEvent(dt);
-      } else if (!rt.dialogOpen && !menuRef.current) {
+      } else if (!rt.dialogOpen && !menuRef.current && !rt.locked) {
         rt.cooldown = Math.max(0, rt.cooldown - dt);
         const dir = rt.held[rt.held.length - 1];
         if (dir && rt.cooldown === 0) tryStep(dir);
@@ -342,8 +352,8 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       } else if (B_KEYS.has(e.code)) {
         e.preventDefault();
         if (e.repeat || rt.dialogOpen) return;
-        if (menuRef.current) setMenuOpen(false);
-        else if (idle()) { rt.held = []; setMenuOpen(true); }
+        if (menuRef.current) { if (overlayRef.current === null) { sfx('menuClose'); setMenuOpen(false); } }
+        else if (idle()) { rt.held = []; sfx('menuOpen'); setMenuOpen(true); }
       }
     };
     const onKeyUp = (e: KeyboardEvent) => { const dir = KEY_DIR[e.code]; if (dir) release(dir); };
@@ -376,7 +386,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
   return (
     <div className="gv" ref={wrapRef} onContextMenu={(e) => e.preventDefault()}>
       <canvas ref={canvasRef} className="gv-canvas" onPointerDown={(e) => { e.preventDefault(); api.current?.a(); }} />
-      <div className="gv-title">{mapName}</div>
+      <div key={mapName} className="gv-title">{mapName}</div>
       {dialog && (
         <Dialog
           key={dialog.key} speaker={dialog.speaker} pages={dialog.pages} choices={dialog.choices}
@@ -387,11 +397,11 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         {dpad('up', '▲', 'up')}{dpad('left', '◀', 'left')}{dpad('right', '▶', 'right')}{dpad('down', '▼', 'down')}
       </div>
       {!dialog && !menuOpen && (
-        <button type="button" className="gv-menu-btn" aria-label="메뉴" onPointerDown={(e) => e.stopPropagation()} onClick={() => setMenuOpen(true)}>
+        <button type="button" className="gv-menu-btn" aria-label="메뉴" data-nosfx onPointerDown={(e) => e.stopPropagation()} onClick={() => { sfx('menuOpen'); setMenuOpen(true); }}>
           <span />
         </button>
       )}
-      {menuOpen && <GameMenu data={data} actions={menu} onData={(next) => { dataRef.current = next; onData(next); }} onClose={() => setMenuOpen(false)} />}
+      {menuOpen && <GameMenu data={data} actions={menu} onData={(next) => { dataRef.current = next; onData(next); }} onClose={() => { sfx('menuClose'); setMenuOpen(false); }} />}
       {overlay === 'shop' && (
         <ShopPanel data={data} onBuy={(next) => { dataRef.current = next; onData(next); }} onClose={() => { setOverlay(null); api.current?.say(['또 오세요!'], '점원'); }} />
       )}

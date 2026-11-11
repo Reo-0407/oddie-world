@@ -8,6 +8,7 @@ import { ROPE_NAMES, type RopeKind } from '../game/capture.ts';
 import type { Ropes } from '../game/save.ts';
 import { REGIONS, type RegionId } from '../overworld/regions.ts';
 import { OddieArt } from './OddieArt.tsx';
+import { jingle, sfx } from '../audio/audio.ts';
 import './battle.css';
 
 interface Props {
@@ -75,6 +76,7 @@ export function CatchScreen({ speciesId, level, region, status, ropes: startRope
     const out: ThrowOutcome = resolveThrow(species.rarity, status, s.kind, aim, ring);
     setPhase('fly');
     setMsg(null);
+    sfx('whoosh');
 
     // 로프가 아래에서 위로 포물선을 그리며 날아간다
     const stage = stageRef.current;
@@ -100,13 +102,14 @@ export function CatchScreen({ speciesId, level, region, status, ropes: startRope
 
     later(() => {
       if (out.grade === 'miss') return nextOrEnd(left, '빗나갔다! 로프를 잃었다.');
+      sfx('shake');
       setMsg(GRADE_LABEL[out.grade] || null);
       setPhase('shake');
-      for (let i = 1; i <= out.shakes; i += 1) later(() => setShake(i), SHAKE_MS * (i - 1) + 200);
+      for (let i = 1; i <= out.shakes; i += 1) later(() => { setShake(i); sfx('shake'); }, SHAKE_MS * (i - 1) + 200);
       later(() => {
         setShake(0);
-        if (out.caught) return finish(true, left, `잡았다! ${species.name}이(가) 동료가 되었다!`);
-        if (out.fled) return finish(false, left, `${species.name}이(가) 도망쳤다…`);
+        if (out.caught) { sfx('ding'); jingle('catch'); return finish(true, left, `잡았다! ${species.name}이(가) 동료가 되었다!`); }
+        if (out.fled) { sfx('flee'); return finish(false, left, `${species.name}이(가) 도망쳤다…`); }
         nextOrEnd(left, `${species.name}이(가) 로프에서 빠져나왔다!`);
       }, SHAKE_MS * out.shakes + 400);
     }, FLY_MS);

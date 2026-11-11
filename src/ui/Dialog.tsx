@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import { sfx } from '../audio/audio.ts';
+import { BADGE_NAMES, BADGE_ORDER } from '../overworld/encounters.ts';
+import { BADGE_COLORS } from './GameMenu.tsx';
 
 export interface DialogControl {
   /** A 버튼: 글자가 나오는 중이면 한 번에 보이고, 다 나왔으면 다음 쪽/선택 확정 */
@@ -27,8 +30,17 @@ export function Dialog({ speaker, pages, choices, onDone, control }: Props) {
   const last = page >= pages.length - 1;
   const showChoices = !typing && last && !!choices?.length;
 
+  // 레벨 업·배지 문구가 나오면 축하 연출
+  const badge = BADGE_ORDER.find((b) => text.startsWith(`${BADGE_NAMES[b]}를 받았다`));
+  const levelUp = !badge && /레벨이 \d+\(으\)로 올랐다/.test(text);
+  useEffect(() => {
+    if (badge) sfx('badge');
+    else if (levelUp) sfx('levelup');
+  }, [page, badge, levelUp]);
+
   useEffect(() => {
     if (!typing) return;
+    if (shown % 2 === 0 && text[shown] !== ' ') sfx('blip');
     const id = window.setTimeout(() => setShown((n) => n + 1), CHAR_MS);
     return () => window.clearTimeout(id);
   }, [typing, shown]);
@@ -54,6 +66,13 @@ export function Dialog({ speaker, pages, choices, onDone, control }: Props) {
 
   return (
     <div className="dialog" role="dialog" aria-live="polite" onPointerDown={(e) => { e.stopPropagation(); control.current?.press(); }}>
+      {levelUp && <div key={`lv${page}`} className="fx-levelup" aria-hidden><span>LEVEL UP!</span></div>}
+      {badge && (
+        <div key={`bd${page}`} className="fx-badge" aria-hidden>
+          <span className="fx-badge-icon" style={{ background: BADGE_COLORS[badge] }}>{BADGE_NAMES[badge].slice(0, 2)}</span>
+          <b>{BADGE_NAMES[badge]} 획득!</b>
+        </div>
+      )}
       {speaker && <div className="dialog-name">{speaker}</div>}
       <p className="dialog-text">{text.slice(0, shown)}</p>
       {!typing && !showChoices && <span className="dialog-next">▼</span>}
