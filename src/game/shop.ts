@@ -12,7 +12,7 @@ export const ITEM_NAMES: Record<ShopItem, string> = { basic: '로프', sturdy: '
 export const ITEM_HELP: Record<ShopItem, string> = {
   basic: '야생 오디를 잡는 기본 로프',
   sturdy: '잡기 쉬운 튼튼한 로프 (확률 ×1.8)',
-  potion: '전투 중 내 오디 체력 회복 (최대 체력의 50%, 최소 30)',
+  potion: '전투 중 체력 절반 회복',
 };
 
 /** 한 종류를 가질 수 있는 최대 개수 */

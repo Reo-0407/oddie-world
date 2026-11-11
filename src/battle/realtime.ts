@@ -4,6 +4,7 @@ import type { Rng } from '../engine/rng.ts';
 import { changeStage } from '../engine/stages.ts';
 import type { BattlePokemon, Move, StatKey, Status, TypeName } from '../engine/types.ts';
 import { createBattlePokemon } from '../game/factory.ts';
+import { potionHeal } from '../game/shop.ts';
 
 /** 포켓몬 고처럼 실시간으로 싸우는 오프라인 전투(야생·트레이너). 순수 모델이고 화면은 BattleScreen */
 
@@ -17,9 +18,16 @@ export const DODGE_REDUCTION = 0.75;
 export const TELEGRAPH_MS = 1000;
 export const SWITCH_COOLDOWN_MS = 3000;
 export const FOE_MIN_MS = 1000;
-export const FOE_MAX_MS = 2000;
+export const FOE_MAX_MS = 1600;
 export const DOT_MS = 4000;
 export const SLEEP_MS = 2500;
+/** 포켓몬 고처럼 면역 타입도 0이 아니라 0.39배 */
+export const IMMUNE_SCALE = 0.39;
+/** 맞은 쪽도 에너지가 찬다: 최대 체력만큼 맞으면 이만큼 */
+export const HIT_ENERGY = 60;
+/** 트레이너 오디는 에너지를 반쯤 채운 채로 나온다(피하기가 의미 있게) */
+export const TRAINER_START_ENERGY = 50;
+export const POTION_COOLDOWN_MS = 3000;
 
 /** 기술이 하나도 없거나 전부 변화 기술일 때 쓰는 기본 공격 */
 const STRUGGLE: Move = { id: 0, name: '몸통박치기', type: 'normal', category: 'physical', power: 40, accuracy: 100, priority: 0, effects: [] };
@@ -67,6 +75,9 @@ export interface RtState {
   dodgeMs: number;
   /** 상대가 다음에 움직일 때까지 */
   foeNextMs: number;
+  /** 남은 회복약과 회복약 쿨타임 */
+  potions: number;
+  potionCd: number;
   /** 상대 필살기 예고 중이면 남은 시간과 기술 번호 */
   telegraph: { ms: number; charged: number } | null;
   result: RtResult | null;
@@ -81,6 +92,7 @@ export interface RtInput {
   dodge?: boolean;
   switchTo?: number;
   run?: boolean;
+  potion?: boolean;
 }
 
 const damaging = (moves: Move[]) => moves.filter((m) => m.category !== 'status' && m.power > 0);
@@ -93,7 +105,10 @@ export function energyCost(move: Move): number {
 export function makeFighter(speciesId: number, level: number): Fighter {
   const mon = createBattlePokemon(speciesById(speciesId), level, MOVES);
   const moves = damaging(mon.moves);
-  const fast = moves.length ? moves.reduce((a, b) => (b.power < a.power ? b : a)) : STRUGGLE;
+  // 기본 공격은 가장 약한 자기 타입 기술(없으면 가장 약한 기술): 다들 박치기만 쓰지 않게
+  const stab = moves.filter((m) => mon.types.includes(m.type));
+  const pool = stab.length ? stab : moves;
+  const fast = pool.length ? pool.reduce((a, b) => (b.power < a.power ? b : a)) : STRUGGLE;
   const rest = moves.filter((m) => m !== fast);
   const charged = (rest.length ? rest : [fast]).sort((a, b) => b.power - a.power).slice(0, 2);
   return { mon, fast, charged, energy: 0, dotMs: DOT_MS, sleepMs: 0 };
@@ -112,11 +127,13 @@ export function foeInterval(me: BattlePokemon, foe: BattlePokemon): number {
   return Math.round(Math.min(FOE_MAX_MS, Math.max(FOE_MIN_MS, ms)));
 }
 
-export function createRealtime(kind: RtKind, team: { speciesId: number; level: number }[], foes: { speciesId: number; level: number }[]): RtState {
+export function createRealtime(
+  kind: RtKind, team: { speciesId: number; level: number }[], foes: { speciesId: number; level: number }[], potions = 0,
+): RtState {
   const me = team.map((o) => makeFighter(o.speciesId, o.level));
-  const foe = foes.map((o) => makeFighter(o.speciesId, o.level));
+  const foe = foes.map((o) => ({ ...makeFighter(o.speciesId, o.level), energy: kind === 'trainer' ? TRAINER_START_ENERGY : 0 }));
   return {
-    kind, me, foe, myActive: 0, foeActive: 0, fastCd: 0, switchCd: 0, dodgeMs: 0,
+    kind, me, foe, myActive: 0, foeActive: 0, fastCd: 0, switchCd: 0, dodgeMs: 0, potions, potionCd: 0,
     foeNextMs: foeInterval(me[0].mon, foe[0].mon), telegraph: null, result: null, events: [],
   };
 }
@@ -132,19 +149,27 @@ const clone = (s: RtState): RtState => ({
 export const activeOf = (s: RtState, side: SideKey) => (side === 'me' ? s.me[s.myActive] : s.foe[s.foeActive]);
 const other = (side: SideKey): SideKey => (side === 'me' ? 'foe' : 'me');
 
+/** 포켓몬 고 상성 배율: 2배→1.6, 0.5배→0.625, 면역→0.39(한 쪽 상성이 너무 세지 않게) */
+export const goEffectiveness = (e: number) => (e === 0 ? IMMUNE_SCALE : 1.6 ** Math.log2(e));
+
 /** 한 번의 공격: 피해, 에너지, 기술 효과(능력 변화·상태이상·흡수·반동). 명중률은 무시한다 */
 function strike(s: RtState, by: SideKey, move: Move, charged: boolean, rng: Rng) {
   const att = activeOf(s, by);
   const target = other(by);
   const def = activeOf(s, target);
   const power = Math.max(1, Math.round(move.power * (charged ? CHARGED_POWER_SCALE : FAST_POWER_SCALE)));
-  const r = computeDamage(att.mon, def.mon, move, rng, { power });
+  const raw = computeDamage(att.mon, def.mon, move, rng, { power });
+  const immune = raw.effectiveness === 0;
+  const base = immune ? computeDamage(att.mon, { ...def.mon, types: [] }, move, rng, { power }) : raw;
+  const effectiveness = goEffectiveness(raw.effectiveness);
+  const r = { ...base, effectiveness, damage: Math.max(1, Math.floor((base.damage * effectiveness) / base.effectiveness)) };
   const dodged = target === 'me' && s.dodgeMs > 0;
   const amount = Math.min(def.mon.hp, dodged ? Math.max(1, Math.floor(r.damage * (1 - DODGE_REDUCTION))) : r.damage);
   def.mon.hp -= amount;
   if (!charged) att.energy = Math.min(MAX_ENERGY, att.energy + FAST_ENERGY);
+  def.energy = Math.min(MAX_ENERGY, def.energy + Math.round((amount / def.mon.stats.hp) * HIT_ENERGY));
   s.events.push({ t: 'hit', side: target, amount, hp: def.mon.hp, type: move.type, charged, dodged, effectiveness: r.effectiveness, critical: r.critical, move: move.name });
-  if (r.effectiveness === 0) return;
+  if (immune) return; // 면역이면 부가 효과는 없다
   for (const e of move.effects) {
     if (e.kind === 'stage' && rng.chance(e.chance / 100)) {
       const side = e.target === 'self' ? by : target;
@@ -217,6 +242,7 @@ export function tick(state: RtState, dtMs: number, input: RtInput, rng: Rng): Rt
   s.fastCd = Math.max(0, s.fastCd - dt);
   s.switchCd = Math.max(0, s.switchCd - dt);
   s.dodgeMs = Math.max(0, s.dodgeMs - dt);
+  s.potionCd = Math.max(0, s.potionCd - dt);
 
   if (input.run && s.kind === 'wild') {
     s.result = 'fled';
@@ -233,6 +259,15 @@ export function tick(state: RtState, dtMs: number, input: RtInput, rng: Rng): Rt
     s.events.push({ t: 'send', side: 'me', name: s.me[sw].mon.name });
   }
   const mine = activeOf(s, 'me');
+  if (input.potion && s.potionCd === 0 && s.potions > 0 && mine.mon.hp > 0) {
+    const healed = potionHeal(mine.mon.hp, mine.mon.stats.hp);
+    if (healed > 0) {
+      mine.mon.hp += healed;
+      s.potions -= 1;
+      s.potionCd = POTION_COOLDOWN_MS;
+      s.events.push({ t: 'heal', side: 'me', amount: healed, hp: mine.mon.hp });
+    }
+  }
   if (input.dodge && s.dodgeMs === 0) {
     s.dodgeMs = DODGE_MS;
     s.events.push({ t: 'dodge' });

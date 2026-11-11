@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { MAPS } from './maps/index.ts';
 import { rollWild } from './encounters.ts';
-import { canStep, facingTile, interactTarget, npcInSight, stepPlayer, tileAt, mapWidth, type PlayerState } from './world.ts';
+import { canStep, facingTile, interactTarget, npcInSight, spawnOf, stepPlayer, tileAt, mapWidth, type PlayerState } from './world.ts';
+import { TOWN_RESPAWN, TOWN_START } from '../game/save.ts';
 import { isGrass, isWalkable } from './tiles.ts';
 
 const town = MAPS.town;
@@ -109,5 +110,21 @@ describe('NPC 시야와 상호작용', () => {
     expect(interactTarget(center, center.npcs, at('center', 4, 4, 'up'))).toMatchObject({ type: 'npc', npc: { id: 'center-nurse' } });
     expect(interactTarget(town, town.npcs, at('town', 6, 9, 'right'))).toBeNull();
     expect(facingTile(at('town', 3, 3, 'left'))).toEqual({ x: 2, y: 3 });
+  });
+});
+
+describe('불러온 위치 검사', () => {
+  const p = { badges: [], flags: ['starter'] };
+  it('설 수 있는 칸이면 그대로', () => {
+    expect(spawnOf(TOWN_START, TOWN_RESPAWN, TOWN_START, get, p)).toEqual(TOWN_START);
+  });
+  it('지도 밖이나 벽이면 부활 지점, 부활 지점도 나쁘면 시작점', () => {
+    const wall = (() => {
+      for (let y = 0; y < town.rows.length; y += 1) for (let x = 0; x < mapWidth(town); x += 1) if (!canStep(town, [], x, y)) return { x, y };
+      throw new Error('벽 없음');
+    })();
+    expect(spawnOf(at('town', 999, 999), TOWN_RESPAWN, TOWN_START, get, p)).toEqual({ ...TOWN_RESPAWN, facing: 'down' });
+    expect(spawnOf(at('town', wall.x, wall.y), TOWN_RESPAWN, TOWN_START, get, p)).toEqual({ ...TOWN_RESPAWN, facing: 'down' });
+    expect(spawnOf(at('nowhere', 1, 1), { map: 'nowhere', x: 1, y: 1 }, TOWN_START, get, p)).toEqual(TOWN_START);
   });
 });

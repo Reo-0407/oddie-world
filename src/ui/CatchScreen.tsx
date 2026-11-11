@@ -53,7 +53,7 @@ export function CatchScreen({ speciesId, level, region, status, ropes: startRope
     let last = performance.now();
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
-      if (st.current.phase === 'aim') timeRef.current += now - last;
+      if (st.current.phase === 'aim') timeRef.current += Math.max(0, Math.min(50, now - last));
       last = now;
       if (ringRef.current) ringRef.current.style.transform = `translate(-50%, -50%) scale(${ringScale(timeRef.current)})`;
     };

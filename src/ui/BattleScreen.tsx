@@ -7,6 +7,7 @@ import { createRng } from '../engine/rng.ts';
 import type { Status, TypeName } from '../engine/types.ts';
 import { REGIONS, type RegionId } from '../overworld/regions.ts';
 import { OddieArt, typeColor } from './OddieArt.tsx';
+import { TYPE_NAMES } from './DexOverlay.tsx';
 import { jingle, sfx } from '../audio/audio.ts';
 import './battle.css';
 
@@ -16,8 +17,10 @@ interface Props {
   team: { speciesId: number; level: number }[];
   foes: { speciesId: number; level: number }[];
   trainerName?: string;
-  /** 끝나면: 결과, 서 있는 내 오디, 마지막 상대 오디의 상태이상(잡기 확률용) */
-  onEnd(result: RtResult, alive: boolean[], foeStatus: Status | null): void;
+  /** 가진 회복약 수 */
+  potions: number;
+  /** 끝나면: 결과, 서 있는 내 오디, 마지막 상대 오디의 상태이상(잡기 확률용), 남은 회복약 */
+  onEnd(result: RtResult, alive: boolean[], foeStatus: Status | null, potionsLeft: number): void;
 }
 
 type Pop = { id: number; side: 'me' | 'foe'; text: string; cls: string };
@@ -25,11 +28,11 @@ const STATUS_NAMES: Record<Status, string> = { poison: '독', burn: '화상', pa
 const SWIPE_PX = 40;
 
 /** 포켓몬 고식 실시간 전투 화면. 탭=기본 공격, 좌우로 쓸기=피하기, 필살기 버튼 */
-export function BattleScreen({ kind, region, team, foes, trainerName, onEnd }: Props) {
-  const [state, setState] = useState<RtState>(() => createRealtime(kind, team, foes));
+export function BattleScreen({ kind, region, team, foes, trainerName, potions, onEnd }: Props) {
+  const [state, setState] = useState<RtState>(() => createRealtime(kind, team, foes, potions));
   const [pops, setPops] = useState<Pop[]>([]);
   const [fx, setFx] = useState({ foeHit: 0, meHit: 0, flash: 0, wave: 0, waveColor: '#fff', dodge: 0 });
-  const [banner, setBanner] = useState<string | null>(null);
+  const [banner, setBanner] = useState<{ id: number; text: string } | null>(null);
   const [picking, setPicking] = useState(false);
   const input = useRef<RtInput>({});
   const held = useRef(false);
@@ -39,13 +42,21 @@ export function BattleScreen({ kind, region, team, foes, trainerName, onEnd }: P
   const endRef = useRef(onEnd);
   endRef.current = onEnd;
   const gesture = useRef<{ x: number; y: number; dodged: boolean } | null>(null);
+  const timers = useRef<number[]>([]);
+  const later = (fn: () => void, ms: number) => { timers.current.push(window.setTimeout(fn, ms)); };
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  const bannerId = useRef(0);
+  /** 문구를 띄우고 ms 뒤 지운다. 그사이 새 문구가 떴으면 그것은 지우지 않는다 */
+  const showBanner = (text: string, ms?: number, then?: () => void) => {
+    const id = (bannerId.current += 1);
+    setBanner({ id, text });
+    if (ms) later(() => { setBanner((b) => (b?.id === id ? null : b)); then?.(); }, ms);
+  };
 
   // 시작 문구 1.2초 동안은 멈춰 있다
   useEffect(() => {
     const name = state.foe[0].mon.name;
-    setBanner(kind === 'wild' ? `야생 ${name}이(가) 나타났다!` : `${trainerName ?? '트레이너'}이(가) 승부를 걸어왔다!`);
-    const t = setTimeout(() => { paused.current = false; setBanner(null); }, 1200);
-    return () => clearTimeout(t);
+    showBanner(kind === 'wild' ? `야생 ${name}이(가) 나타났다!` : `${trainerName ?? '트레이너'}이(가) 승부를 걸어왔다!`, 1200, () => { paused.current = false; });
     // 처음 한 번만
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -59,7 +70,7 @@ export function BattleScreen({ kind, region, team, foes, trainerName, onEnd }: P
     let ended = false;
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
-      const dt = Math.min(50, now - last);
+      const dt = Math.max(0, Math.min(50, now - last));
       last = now;
       if (paused.current || pickingRef.current || ended) return;
       const inp = { ...input.current, fast: input.current.fast || held.current };
@@ -90,22 +101,21 @@ export function BattleScreen({ kind, region, team, foes, trainerName, onEnd }: P
           } else if (e.t === 'heal') {
             add.push({ id: popId += 1, side: e.side, text: `+${e.amount}`, cls: 'heal' });
           } else if (e.t === 'send') {
-            setBanner(e.side === 'foe' ? `상대는 ${e.name}을(를) 내보냈다!` : `가랏, ${e.name}!`);
-            setTimeout(() => setBanner(null), 1100);
+            showBanner(e.side === 'foe' ? `상대는 ${e.name}을(를) 내보냈다!` : `가랏, ${e.name}!`, 1100);
           } else if (e.t === 'end') {
             ended = true;
             const r = e.result;
             if (r === 'won') jingle('victory');
             else if (r === 'fled') sfx('flee');
-            setBanner(r === 'won' ? '이겼다!' : r === 'lost' ? '졌다…' : '무사히 도망쳤다!');
+            showBanner(r === 'won' ? '이겼다!' : r === 'lost' ? '졌다…' : '무사히 도망쳤다!');
             const final = cur;
-            setTimeout(() => endRef.current(r, aliveMine(final), activeOf(final, 'foe').mon.status), 1300);
+            later(() => endRef.current(r, aliveMine(final), activeOf(final, 'foe').mon.status, final.potions), 1300);
           }
         }
         if (add.length) {
           setPops((p) => [...p, ...add]);
           const ids = new Set(add.map((a) => a.id));
-          setTimeout(() => setPops((p) => p.filter((x) => !ids.has(x.id))), 900);
+          later(() => setPops((p) => p.filter((x) => !ids.has(x.id))), 900);
         }
       }
       setState(cur);
@@ -117,6 +127,7 @@ export function BattleScreen({ kind, region, team, foes, trainerName, onEnd }: P
       if (e.code === 'Space' || e.code === 'KeyZ') { e.preventDefault(); held.current = true; }
       else if (e.code === 'ArrowLeft' || e.code === 'ArrowRight' || e.code === 'KeyA' || e.code === 'KeyD') { e.preventDefault(); if (!e.repeat) input.current.dodge = true; }
       else if (e.code === 'Digit1' || e.code === 'Digit2') { e.preventDefault(); input.current.charged = e.code === 'Digit1' ? 0 : 1; }
+      else if (e.code === 'KeyQ') { e.preventDefault(); input.current.potion = true; }
     };
     const onUp = (e: KeyboardEvent) => { if (e.code === 'Space' || e.code === 'KeyZ') held.current = false; };
     const onBlur = () => { held.current = false; };
@@ -141,10 +152,13 @@ export function BattleScreen({ kind, region, team, foes, trainerName, onEnd }: P
   const plate = (f: Fighter, mine: boolean) => {
     const ratio = f.mon.hp / f.mon.stats.hp;
     return (
-      <div className={`rt-plate ${mine ? 'mine' : 'theirs'}`}>
+      <div className={`rt-plate ${mine ? 'mine' : 'theirs'}`} style={{ '--tc': typeColor(f.mon.types[0]) } as React.CSSProperties}>
         <div className="rt-plate-name">
           <b>{f.mon.name}</b> <span>Lv.{f.mon.level}</span>
           {f.mon.status && <span className="rt-status">{STATUS_NAMES[f.mon.status]}</span>}
+        </div>
+        <div className="rt-types">
+          {f.mon.types.map((t) => <span key={t} className="rt-type" style={{ background: typeColor(t) }}>{TYPE_NAMES[t]}</span>)}
         </div>
         <div className="rt-hp"><div className={ratio < 0.25 ? 'low' : ''} style={{ width: `${ratio * 100}%` }} /></div>
         <div className="rt-cp">전투력 {powerOf(f.mon)} · {f.mon.hp}/{f.mon.stats.hp}</div>
@@ -183,6 +197,13 @@ export function BattleScreen({ kind, region, team, foes, trainerName, onEnd }: P
         <button type="button" onClick={() => setPicking(true)} disabled={state.switchCd > 0 || state.me.length < 2}>
           교체{state.switchCd > 0 ? ` ${Math.ceil(state.switchCd / 1000)}` : ''}
         </button>
+        <button
+          type="button" onClick={() => { input.current.potion = true; }}
+          disabled={state.potions <= 0 || state.potionCd > 0 || me.mon.hp <= 0 || me.mon.hp >= me.mon.stats.hp}
+          aria-label={`회복약 ${state.potions}개`}
+        >
+          회복약 ×{state.potions}{state.potionCd > 0 ? ` (${Math.ceil(state.potionCd / 1000)})` : ''}
+        </button>
         {kind === 'wild' && <button type="button" onClick={() => { input.current.run = true; }}>도망</button>}
         {kind === 'trainer' && (
           <span className="rt-left" aria-label="상대 남은 오디">
@@ -191,7 +212,7 @@ export function BattleScreen({ kind, region, team, foes, trainerName, onEnd }: P
         )}
       </div>
 
-      <div className="rt-foe">
+      <div className="rt-foe" style={{ '--tc': typeColor(foe.mon.types[0]) } as React.CSSProperties}>
         <div className="rt-shadow" />
         {state.telegraph && <div className="rt-bang">!</div>}
         <div key={`fe${state.foeActive}`} className="rt-enter-foe">
@@ -204,7 +225,7 @@ export function BattleScreen({ kind, region, team, foes, trainerName, onEnd }: P
         {pops.filter((p) => p.side === 'foe').map((p) => <span key={p.id} className={`rt-pop ${p.cls}`}>{p.text}</span>)}
       </div>
 
-      <div className="rt-me">
+      <div className="rt-me" style={{ '--tc': typeColor(me.mon.types[0]) } as React.CSSProperties}>
         <div className="rt-shadow small" />
         <div key={`me${state.myActive}`} className="rt-enter-me">
           <div key={`d${fx.dodge}`} className={fx.dodge ? 'rt-dodge' : ''}>
@@ -220,7 +241,7 @@ export function BattleScreen({ kind, region, team, foes, trainerName, onEnd }: P
 
       {fx.flash > 0 && <div key={`fl${fx.flash}`} className="rt-flash" />}
       {fx.wave > 0 && <div key={`w${fx.wave}`} className="rt-wave" style={{ borderColor: fx.waveColor, boxShadow: `0 0 40px ${fx.waveColor}` }} />}
-      {banner && <div key={banner} className="rt-banner">{banner}</div>}
+      {banner && <div key={banner.id} className="rt-banner">{banner.text}</div>}
 
       <div className="rt-bottom" onPointerDown={stop}>
         <div className="rt-charged">
@@ -242,7 +263,7 @@ export function BattleScreen({ kind, region, team, foes, trainerName, onEnd }: P
           })}
         </div>
         <div className="rt-energy"><div style={{ width: `${(me.energy / MAX_ENERGY) * 100}%` }} /></div>
-        <div className="rt-hint">탭: 기본 공격 · 좌우로 쓸기: 피하기 · 키보드 Space / ← → / 1 2</div>
+        <div className="rt-hint">탭: 기본 공격 · 좌우로 쓸기: 피하기 · 키보드 Space / ← → / 1 2 / Q 회복약</div>
       </div>
 
       {picking && (

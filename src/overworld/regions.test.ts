@@ -7,6 +7,23 @@ describe('구역별 오디 가중치', () => {
   const candidates = SPECIES.map((s) => ({ id: s.id, types: s.types }));
   const rng = (seed: number) => createRng(seed).next;
 
+  it('초반 구역일수록 희귀한 오디가 드물다', () => {
+    expect(speciesWeight('meadow', ['grass'], 'Legendary')).toBeCloseTo(4 * 0.15);
+    expect(speciesWeight('meadow', ['grass'], 'Epic')).toBe(2);
+    expect(speciesWeight('meadow', ['grass'], 'Common')).toBe(4);
+    expect(speciesWeight('desert', ['water'], '???')).toBeCloseTo(0.3);
+    expect(speciesWeight('snow', ['ice'], 'Epic')).toBeCloseTo(5 * 0.85);
+    expect(speciesWeight('volcano', ['fire'], 'Secret')).toBe(4);
+    const withRarity = SPECIES.map((s) => ({ id: s.id, types: s.types, rarity: s.rarity }));
+    const next = rng(5);
+    let rare = 0;
+    for (let i = 0; i < 4000; i += 1) {
+      const r = SPECIES[pickSpeciesForRegion('meadow', withRarity, next) - 1].rarity;
+      if (r === 'Legendary' || r === 'Secret' || r === '???') rare += 1;
+    }
+    expect(rare / 4000).toBeLessThan(0.1);
+  });
+
   it('어울리는 타입이 높은 가중치, 나머지는 1', () => {
     expect(speciesWeight('desert', ['ground'])).toBe(4);
     expect(speciesWeight('desert', ['water'])).toBe(1);

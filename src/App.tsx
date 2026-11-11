@@ -119,10 +119,11 @@ export default function App() {
     transition('trainer', () => setFight({ stage: 'fight', kind: 'trainer', region: getMap(d.map)?.region ?? 'meadow', trainer }));
   };
 
-  const onBattleEnd = (result: RtResult, alive: boolean[], foeStatus: Status | null) => {
-    const d = dataRef.current;
-    if (!d || !fight || fight.stage !== 'fight') return;
-    if (result === 'fled') return backToWorld(null);
+  const onBattleEnd = (result: RtResult, alive: boolean[], foeStatus: Status | null, potionsLeft: number) => {
+    const cur = dataRef.current;
+    if (!cur || !fight || fight.stage !== 'fight') return;
+    const d = { ...cur, potions: potionsLeft }; // 전투 중 쓴 회복약
+    if (result === 'fled') { save(d); return backToWorld(null); }
     if (result === 'lost') {
       const s = settleLoss(d);
       save(s.save);
@@ -200,6 +201,9 @@ export default function App() {
         <button className="wide" onClick={() => update(newSave(account!.username, pickLook))}>시작하기</button>
       </main>,
     );
+  } else if (flow.conflict) {
+    // 어느 저장을 쓸지 고르는 동안 월드는 그리지 않는다(고른 뒤 새로 그린다)
+    screen = scene(<main className="screen auth" />);
   } else if (online) {
     // 로그인했다면 대전 이름도 계정 아이디로 맞춘다(랭킹의 이름과 어긋나지 않게)
     screen = (
@@ -218,6 +222,7 @@ export default function App() {
         team={data.team}
         foes={fight.kind === 'wild' ? [fight.foe] : fight.trainer.team}
         trainerName={fight.kind === 'trainer' ? fight.trainer.name : undefined}
+        potions={data.potions}
         onEnd={onBattleEnd}
       />
     );
@@ -246,6 +251,9 @@ export default function App() {
             const keep = { name: data.name, look: data.characterIndex };
             flow.restart();
             update(newSave(keep.name, keep.look));
+            // 월드를 새로 그린다: 옛 위치·NPC 상태가 새 저장에 섞이지 않게
+            setMessage(null);
+            setWorldKey((k) => k + 1);
           },
         }}
       />
@@ -266,7 +274,7 @@ export default function App() {
           local={flow.conflict.local}
           cloud={flow.conflict.cloud}
           newer={flow.conflict.newer}
-          onChoose={flow.resolveConflict}
+          onChoose={(choice) => { flow.resolveConflict(choice); setWorldKey((k) => k + 1); }}
         />
       )}
     </>

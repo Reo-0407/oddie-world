@@ -130,3 +130,17 @@ export const exitOf = (map: MapData): { map: string; x: number; y: number } | nu
   const w = map.warps[0];
   return w ? { map: w.to.map, x: w.to.x, y: w.to.y } : null;
 };
+
+/** 불러온 위치에 설 수 없으면(없는 지도·지도 밖·벽·NPC 자리) 부활 지점, 그것도 안 되면 시작점 */
+export function spawnOf(
+  saved: PlayerState, respawn: { map: string; x: number; y: number }, start: PlayerState,
+  lookup: (id: string) => MapData | undefined, p: Progress,
+): PlayerState {
+  const ok = (s: { map: string; x: number; y: number }) => {
+    const m = lookup(s.map);
+    return !!m && canStep(m, placeNpcs(m, p), s.x, s.y);
+  };
+  if (ok(saved)) return { map: saved.map, x: saved.x, y: saved.y, facing: saved.facing };
+  if (ok(respawn)) return { ...respawn, facing: 'down' };
+  return { ...start };
+}

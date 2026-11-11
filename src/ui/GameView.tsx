@@ -8,7 +8,7 @@ import { createRenderer, type Actor } from '../overworld/render.ts';
 import { PLAYER_LOOKS } from '../overworld/sprites.ts';
 import { TILE } from '../overworld/tiles.ts';
 import {
-  DELTA, STEP_MS, canStep, exitOf, facingTile, gateOpen, interactTarget, npcInSight, npcLines, placeNpcs, progressOf, stepPlayer,
+  DELTA, STEP_MS, canStep, exitOf, facingTile, gateOpen, interactTarget, npcInSight, npcLines, placeNpcs, progressOf, spawnOf, stepPlayer,
   type Dir, type PlayerState,
 } from '../overworld/world.ts';
 import { rollWild } from '../overworld/encounters.ts';
@@ -89,9 +89,9 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
     ro.observe(wrap);
 
     const start = dataRef.current;
-    const first = getMap(start.map) ? start : { ...start, ...TOWN_START };
-    let map: MapData = getMap(first.map)!;
-    const player: PlayerState = { map: map.id, x: first.x, y: first.y, facing: first.facing };
+    // 저장된 칸에 설 수 없으면(지도가 바뀌었거나 망가진 저장) 부활 지점이나 마을 시작점으로
+    const player: PlayerState = spawnOf(start, start.respawn, TOWN_START, getMap, progressOf(start));
+    let map: MapData = getMap(player.map)!;
     let npcs = cloneNpcs(map, start);
     const look = PLAYER_LOOKS[start.characterIndex % PLAYER_LOOKS.length];
     setMapName(map.name);
@@ -279,7 +279,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
     let last = performance.now();
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
-      const dt = Math.min(50, now - last);
+      const dt = Math.max(0, Math.min(50, now - last));
       last = now;
       rt.time += dt;
 
@@ -340,6 +340,16 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // 메뉴·상점이 열려 있으면 키보드는 그 창의 버튼들이 쓴다. Esc/X만 닫기(스타터 고르기는 닫지 않는다)
+      if (menuRef.current) {
+        if (B_KEYS.has(e.code) && !e.repeat) {
+          if (overlayRef.current === 'shop') { setOverlay(null); api.current?.say(['또 오세요!'], '점원'); }
+          else if (overlayRef.current === null) { sfx('menuClose'); setMenuOpen(false); }
+        }
+        return;
+      }
+      // 포커스된 버튼은 Enter/Space를 스스로 처리한다
+      if (t && t.tagName === 'BUTTON' && (e.code === 'Enter' || e.code === 'Space')) return;
       const dir = KEY_DIR[e.code];
       if (dir) {
         e.preventDefault();
@@ -352,8 +362,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       } else if (B_KEYS.has(e.code)) {
         e.preventDefault();
         if (e.repeat || rt.dialogOpen) return;
-        if (menuRef.current) { if (overlayRef.current === null) { sfx('menuClose'); setMenuOpen(false); } }
-        else if (idle()) { rt.held = []; sfx('menuOpen'); setMenuOpen(true); }
+        if (idle()) { rt.held = []; sfx('menuOpen'); setMenuOpen(true); }
       }
     };
     const onKeyUp = (e: KeyboardEvent) => { const dir = KEY_DIR[e.code]; if (dir) release(dir); };

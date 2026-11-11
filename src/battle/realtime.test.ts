@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../engine/rng.ts';
 import {
-  DODGE_MS, FAST_COOLDOWN_MS, FAST_ENERGY, SWITCH_COOLDOWN_MS, TELEGRAPH_MS,
-  activeOf, createRealtime, energyCost, foeInterval, makeFighter, tick, type RtInput, type RtState,
+  DODGE_MS, FAST_COOLDOWN_MS, FAST_ENERGY, FOE_MAX_MS, IMMUNE_SCALE, POTION_COOLDOWN_MS, SWITCH_COOLDOWN_MS, TELEGRAPH_MS, TRAINER_START_ENERGY,
+  activeOf, createRealtime, energyCost, foeInterval, goEffectiveness, makeFighter, tick, type RtInput, type RtState,
 } from './realtime.ts';
 
 const wild = () => createRealtime('wild', [{ speciesId: 1, level: 5 }, { speciesId: 42, level: 5 }], [{ speciesId: 2, level: 5 }]);
@@ -60,11 +60,11 @@ describe('실시간 전투: 내 공격', () => {
 });
 
 describe('실시간 전투: 상대', () => {
-  it('상대 간격은 속도로 1.0~2.0초', () => {
+  it('상대 간격은 속도로 1.0~1.6초', () => {
     const slow = makeFighter(1, 5).mon;
     const fast = makeFighter(1, 60).mon;
     expect(foeInterval(slow, fast)).toBe(1000);
-    expect(foeInterval(fast, slow)).toBe(2000);
+    expect(foeInterval(fast, slow)).toBe(FOE_MAX_MS);
     expect(foeInterval(slow, slow)).toBe(1500);
   });
 
@@ -93,6 +93,65 @@ describe('실시간 전투: 상대', () => {
   });
 });
 
+describe('실시간 전투: 밸런스 규칙', () => {
+  it('트레이너 오디는 에너지 50으로 시작하고 야생은 0', () => {
+    expect(createRealtime('trainer', [{ speciesId: 1, level: 5 }], [{ speciesId: 2, level: 5 }]).foe[0].energy).toBe(TRAINER_START_ENERGY);
+    expect(wild().foe[0].energy).toBe(0);
+  });
+
+  it('맞은 쪽도 받은 피해만큼 에너지가 찬다', () => {
+    const rng = createRng(11);
+    let s = freeze(wild());
+    s = tick(s, 16, { fast: true }, rng);
+    const hit = s.events.find((e) => e.t === 'hit' && e.side === 'foe');
+    const foe = activeOf(s, 'foe');
+    expect(hit && hit.t === 'hit' && foe.energy).toBe(hit && hit.t === 'hit' ? Math.round((hit.amount / foe.mon.stats.hp) * 60) : -1);
+  });
+
+  it('면역 타입도 0.39배 피해(포켓몬 고 규칙)', () => {
+    const rng = createRng(12);
+    // Emberi(불꽃/고스트)는 노말 기술에 면역
+    let s = freeze(createRealtime('wild', [{ speciesId: 1, level: 10 }], [{ speciesId: 42, level: 10 }]));
+    s.me[0].fast = { ...s.me[0].fast, type: 'normal' };
+    s = tick(s, 16, { fast: true }, rng);
+    const hit = s.events.find((e) => e.t === 'hit' && e.side === 'foe');
+    expect(hit && hit.t === 'hit' && hit.amount).toBeGreaterThan(0);
+    expect(hit && hit.t === 'hit' && hit.effectiveness).toBe(IMMUNE_SCALE);
+  });
+
+  it('상성 배율은 포켓몬 고처럼 1.6 / 0.625 / 0.39', () => {
+    expect(goEffectiveness(1)).toBe(1);
+    expect(goEffectiveness(2)).toBeCloseTo(1.6);
+    expect(goEffectiveness(4)).toBeCloseTo(2.56);
+    expect(goEffectiveness(0.5)).toBeCloseTo(0.625);
+    expect(goEffectiveness(0)).toBe(IMMUNE_SCALE);
+  });
+
+  it('기본 공격은 자기 타입 기술을 고른다', () => {
+    for (const id of [1, 42, 107]) {
+      const f = makeFighter(id, 5);
+      expect(f.mon.types).toContain(f.fast.type);
+    }
+  });
+
+  it('회복약: 절반 회복, 하나 쓰고 3초 쿨타임, 체력이 가득이면 안 쓴다', () => {
+    const rng = createRng(13);
+    let s = freeze(createRealtime('wild', [{ speciesId: 1, level: 20 }], [{ speciesId: 2, level: 5 }], 2));
+    s = tick(s, 16, { potion: true }, rng);
+    expect(s.potions).toBe(2);
+    const max = s.me[0].mon.stats.hp;
+    s.me[0].mon.hp = 1;
+    s = tick(s, 16, { potion: true }, rng);
+    expect(s.potions).toBe(1);
+    expect(s.me[0].mon.hp).toBe(1 + Math.max(30, Math.floor(max / 2)));
+    s.me[0].mon.hp = 1;
+    s = tick(s, POTION_COOLDOWN_MS - 100, { potion: true }, rng);
+    expect(s.potions).toBe(1);
+    s = tick(s, 100, { potion: true }, rng);
+    expect(s.potions).toBe(0);
+  });
+});
+
 describe('실시간 전투: 승패', () => {
   it('트레이너전은 쓰러지면 다음 오디, 다 쓰러지면 이긴다', () => {
     const rng = createRng(9);
@@ -115,14 +174,15 @@ describe('실시간 전투: 승패', () => {
     expect(s.result).toBe('lost');
   });
 
-  it('공정함: 레벨 5 스타터가 기본 공격 + 필살기로 초원 야생(레벨 6)을 이긴다', () => {
+  it('공정함: 레벨 5 스타터가 기본 공격 + 필살기 + 피하기로 같은 레벨 초원 야생을 이긴다', () => {
     for (const starter of [1, 42, 107]) {
       for (const wildId of [1, 2, 4, 5]) {
         const rng = createRng(starter * 100 + wildId);
-        let s = createRealtime('wild', [{ speciesId: starter, level: 5 }], [{ speciesId: wildId, level: 6 }]);
+        let s = createRealtime('wild', [{ speciesId: starter, level: 5 }], [{ speciesId: wildId, level: 5 }]);
         for (let i = 0; i < 2000 && !s.result; i += 1) {
           const me = activeOf(s, 'me');
-          const input: RtInput = me.energy >= energyCost(me.charged[0]) ? { charged: 0 } : { fast: true };
+          const input: RtInput = s.telegraph && s.telegraph.ms <= 300 ? { dodge: true }
+            : me.energy >= energyCost(me.charged[0]) ? { charged: 0 } : { fast: true };
           s = tick(s, 50, input, rng);
         }
         expect(s.result, `starter ${starter} vs ${wildId}`).toBe('won');

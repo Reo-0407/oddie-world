@@ -5,7 +5,7 @@ import { pickSpeciesForRegion, type RegionId } from './regions.ts';
 export const WILD_LEVELS: Record<RegionId, [number, number]> = {
   meadow: [3, 6], desert: [10, 14], snow: [17, 22], volcano: [25, 30],
 };
-const CANDIDATES = SPECIES.map((s) => ({ id: s.id, types: s.types }));
+const CANDIDATES = SPECIES.map((s) => ({ id: s.id, types: s.types, rarity: s.rarity }));
 
 export interface WildRoll { speciesId: number; level: number; region: RegionId }
 
@@ -47,12 +47,12 @@ export const TRAINERS: Record<string, Trainer> = {
     id: 'route1-kid',
     name: '꼬마 트레이너',
     // 1번 Pippo(풀), 그리고 초원 타입 하나 더
-    team: [{ speciesId: 1, level: 5 }, { speciesId: 2, level: 7 }],
+    team: [{ speciesId: 1, level: 5 }, { speciesId: 2, level: 5 }],
     reward: 120,
     lines: { before: '나랑 승부하자!', after: '으앙, 졌다… 너 정말 세구나!' },
   },
   ...Object.fromEntries([
-    t('route1-lass', '꽃 소녀', [[4, 6], [57, 7]], 140, '내 오디들이랑 놀아 줘!', '다음엔 꼭 이길 거야!'),
+    t('route1-lass', '꽃 소녀', [[4, 5], [57, 6]], 140, '내 오디들이랑 놀아 줘!', '다음엔 꼭 이길 거야!'),
     t('gym-meadow-1', '정원사', [[1, 7], [55, 7]], 180, '관장님께 가려면 나부터!', '꽃처럼 활짝 졌다…'),
     leader('meadow', '초원 관장 새싹', [7, 5, 9], '훌륭해! 초원 배지는 네 거야.'),
     t('route2-hiker', '사막 등산가', [[13, 11], [15, 12]], 260, '사막 한가운데서 승부다!', '물… 물 좀…'),
@@ -66,14 +66,14 @@ export const TRAINERS: Record<string, Trainer> = {
     t('route3-climber', '설산 등반가', [[32, 21], [31, 20], [33, 22]], 480, '몸 좀 풀자!', '너야말로 진짜 산사나이구나.'),
     t('gym-snow-1', '스케이터', [[29, 21]], 480, '얼음 위에서는 내가 최고야!', '미끄러졌다…'),
     t('gym-snow-2', '설산 등반가', [[31, 22], [33, 22]], 520, '정상까지 가려면!', '눈사태 같은 기세였어.'),
-    leader('snow', '설원 관장 서리', [34, 35, 36], '얼음이 녹아 버렸어. 설원 배지를 받아.'),
+    leader('snow', '설원 관장 서리', [34, 35, 32], '얼음이 녹아 버렸어. 설원 배지를 받아.'),
     t('route4-firebreather', '불 뿜는 곡예사', [[40, 26], [42, 27]], 600, '내 불꽃 쇼!', '불이 꺼져 버렸네…'),
     t('route4-miner', '광부', [[41, 27], [43, 28], [44, 28]], 640, '곡괭이로 단련한 오디다!', '일찍 퇴근해야겠다.'),
     t('route4-veteran', '노련한 트레이너', [[45, 29], [47, 30]], 700, '덤벼라!', '챔피언도 노려 볼 만하겠어.'),
     t('gym-volcano-1', '불꽃 소녀', [[46, 29]], 700, '내 불꽃은 꺼지지 않아!', '불씨만 남았다…'),
     t('gym-volcano-2', '용암 광부', [[50, 30], [44, 30]], 760, '용암 속에서 캐낸 힘!', '곡괭이가 부러졌다.'),
     leader('volcano', '화산 관장 불꽃', [48, 49, 51], '네 불꽃이 더 뜨거웠어. 화산 배지다!'),
-    t('champion', '챔피언 하늘', [[134, 32], [119, 33], [141, 33], [37, 34], [53, 35]], 5000, '', '오늘부터 네가 새 챔피언이야!', { champion: true }),
+    t('champion', '챔피언 하늘', [[134, 33], [119, 34], [141, 34], [140, 34], [53, 35]], 5000, '', '오늘부터 네가 새 챔피언이야!', { champion: true }),
   ].map((tr) => [tr.id, tr])),
 };
 
