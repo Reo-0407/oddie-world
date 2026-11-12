@@ -1,5 +1,7 @@
 import { SPECIES } from '../data/index.ts';
 import { pickSpeciesForRegion, type RegionId } from './regions.ts';
+import { timeWeight, type DayPhase } from '../game/daytime.ts';
+import { rollShiny } from '../game/fun.ts';
 
 /** 구역별 야생 오디 레벨 범위 */
 export const WILD_LEVELS: Record<RegionId, [number, number]> = {
@@ -7,11 +9,55 @@ export const WILD_LEVELS: Record<RegionId, [number, number]> = {
 };
 const CANDIDATES = SPECIES.map((s) => ({ id: s.id, types: s.types, rarity: s.rarity }));
 
-export interface WildRoll { speciesId: number; level: number; region: RegionId }
+export interface WildRoll {
+  speciesId: number;
+  level: number;
+  region: RegionId;
+  /** 반짝이(금빛) 오디 */
+  shiny?: boolean;
+  /** 강한 야생 오디: 기운을 두르고 3레벨 높고 보상이 1.5배 */
+  strong?: boolean;
+}
 
-export function rollWild(region: RegionId, rand: () => number): WildRoll {
+/** 선두 레벨 대비 야생 레벨 차이와 그 가중치: 대부분 비슷하게(노랑), 가끔 낮거나(초록) 높다(빨강) */
+export const WILD_OFFSETS: [offset: number, weight: number][] = [[-2, 1], [-1, 2.5], [0, 3], [1, 2.5], [2, 1.5], [3, 0.6]];
+/** 구역 최고 레벨보다 이만큼까지만 올라간다(앞 구역이 너무 세지지 않게) */
+export const WILD_LEVEL_HEADROOM = 4;
+export const STRONG_CHANCE = 0.1;
+export const STRONG_LEVELS = 3;
+export const STRONG_REWARD = 1.5;
+
+/** 선두 레벨에 맞춘 야생 레벨: 선두 −2…+3, 구역 최저 레벨 밑으로는 안 내려가고 최고+4 위로는 안 올라간다 */
+export function wildLevel(region: RegionId, lead: number, rand: () => number): number {
   const [lo, hi] = WILD_LEVELS[region];
-  return { speciesId: pickSpeciesForRegion(region, CANDIDATES, rand), level: lo + Math.floor(rand() * (hi - lo + 1)), region };
+  const total = WILD_OFFSETS.reduce((sum, [, w]) => sum + w, 0);
+  let roll = rand() * total;
+  let offset = 0;
+  for (const [o, w] of WILD_OFFSETS) { roll -= w; if (roll < 0) { offset = o; break; } }
+  return Math.max(lo, Math.min(hi + WILD_LEVEL_HEADROOM, lead + offset));
+}
+
+export interface WildOptions {
+  /** 내 선두 오디 레벨: 있으면 거기에 맞춰 레벨을 정한다(없으면 구역 범위) */
+  lead?: number;
+  /** 낮/밤: 밤엔 고스트·악이 많다 */
+  phase?: DayPhase;
+  /** 같은 종 연속 잡기 수(반짝이 확률이 조금 오른다) */
+  combo?: number;
+}
+
+export function rollWild(region: RegionId, rand: () => number, opts: WildOptions = {}): WildRoll {
+  const [lo, hi] = WILD_LEVELS[region];
+  const phase = opts.phase;
+  const speciesId = pickSpeciesForRegion(region, CANDIDATES, rand, phase ? (c) => timeWeight(c.types, phase) : undefined);
+  if (opts.lead === undefined) return { speciesId, level: lo + Math.floor(rand() * (hi - lo + 1)), region };
+  // 막 시작한 트레이너(선두 Lv.8 미만)에게는 강한 야생 오디가 나오지 않는다
+  const strong = opts.lead >= 8 && rand() < STRONG_CHANCE;
+  const level = Math.min(100, wildLevel(region, opts.lead, rand) + (strong ? STRONG_LEVELS : 0));
+  const roll: WildRoll = { speciesId, level, region };
+  if (strong) roll.strong = true;
+  if (rollShiny(rand, opts.combo)) roll.shiny = true;
+  return roll;
 }
 
 export interface TrainerTeamMember { speciesId: number; level: number }

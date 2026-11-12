@@ -17,8 +17,15 @@ interface Props {
   region: RegionId;
   status: Status | null;
   ropes: Ropes;
-  /** caught=잡았나, ropes=남은 로프 */
-  onEnd(caught: boolean, ropes: Ropes): void;
+  /** caught=잡았나, ropes=남은 로프, excellent=Excellent 던지기 수(퀘스트) */
+  onEnd(caught: boolean, ropes: Ropes, excellent: number): void;
+  shiny?: boolean;
+  /** 도감에 아직 없는 종 */
+  isNew?: boolean;
+  /** 잡으면 몇 연속인가(2부터 보여 준다) */
+  combo?: number;
+  /** 지금 팀(잡으면 깡충 뛰어 들어가는 모습) */
+  team?: { speciesId: number; shiny?: boolean }[];
 }
 
 type Phase = 'aim' | 'fly' | 'shake' | 'done';
@@ -27,7 +34,7 @@ const FLY_MS = 650;
 const SHAKE_MS = 650;
 
 /** 포켓몬 고식 잡기: 줄어들었다 커지는 원, 아래 로프를 위로 휙 쓸어 던진다(키보드: 스페이스 누르고 떼기) */
-export function CatchScreen({ speciesId, level, region, status, ropes: startRopes, onEnd }: Props) {
+export function CatchScreen({ speciesId, level, region, status, ropes: startRopes, onEnd, shiny = false, isNew = false, combo = 1, team = [] }: Props) {
   const species = speciesById(speciesId);
   const [ropes, setRopes] = useState(startRopes);
   const [kind, setKind] = useState<RopeKind>(startRopes.basic > 0 ? 'basic' : 'sturdy');
@@ -41,8 +48,10 @@ export function CatchScreen({ speciesId, level, region, status, ropes: startRope
   const timeRef = useRef(0);
   const st = useRef({ phase, ropes, kind });
   st.current = { phase, ropes, kind };
-  const endRef = useRef(onEnd);
-  endRef.current = onEnd;
+  const excellent = useRef(0);
+  const [caughtFx, setCaughtFx] = useState(false);
+  const endRef = useRef((caught: boolean, left: Ropes) => onEnd(caught, left, excellent.current));
+  endRef.current = (caught: boolean, left: Ropes) => onEnd(caught, left, excellent.current);
   const timers = useRef<number[]>([]);
   const later = (fn: () => void, ms: number) => { timers.current.push(window.setTimeout(fn, ms)); };
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
@@ -64,7 +73,8 @@ export function CatchScreen({ speciesId, level, region, status, ropes: startRope
   const finish = (caught: boolean, left: Ropes, text: string) => {
     setPhase('done');
     setMsg(text);
-    later(() => endRef.current(caught, left), 1500);
+    if (caught) setCaughtFx(true);
+    later(() => endRef.current(caught, left), caught ? 2600 : 1500);
   };
 
   const throwRope = (aim: Aim) => {
@@ -102,13 +112,14 @@ export function CatchScreen({ speciesId, level, region, status, ropes: startRope
 
     later(() => {
       if (out.grade === 'miss') return nextOrEnd(left, '빗나갔다! 로프를 잃었다.');
+      if (out.grade === 'excellent') excellent.current += 1;
       sfx('shake');
       setMsg(GRADE_LABEL[out.grade] || null);
       setPhase('shake');
       for (let i = 1; i <= out.shakes; i += 1) later(() => { setShake(i); sfx('shake'); }, SHAKE_MS * (i - 1) + 200);
       later(() => {
         setShake(0);
-        if (out.caught) { sfx('ding'); jingle('catch'); return finish(true, left, `잡았다! ${species.name}이(가) 동료가 되었다!`); }
+        if (out.caught) { sfx('ding'); jingle('catch'); return finish(true, left, `잡았다! ${shiny ? '✨' : ''}${species.name}이(가) 동료가 되었다!`); }
         if (out.fled) { sfx('flee'); return finish(false, left, `${species.name}이(가) 도망쳤다…`); }
         nextOrEnd(left, `${species.name}이(가) 로프에서 빠져나왔다!`);
       }, SHAKE_MS * out.shakes + 400);
@@ -171,14 +182,14 @@ export function CatchScreen({ speciesId, level, region, status, ropes: startRope
   return (
     <div className="rt catch" style={{ background: `linear-gradient(${sky.sky} 0%, ${sky.sky} 45%, ${sky.ground} 62%, ${sky.ground} 100%)` }}>
       <div className="rt-tools">
-        <span className="catch-title">{species.name} Lv.{level}</span>
+        <span className="catch-title">{shiny && '✨'}{species.name} Lv.{level}{combo >= 2 && <em className="catch-combo">연속 {combo}!</em>}</span>
         <button type="button" disabled={phase !== 'aim'} onClick={() => endRef.current(false, ropes)}>그만두기</button>
       </div>
       <div className="catch-stage" ref={stageRef}>
         <div className="catch-target">
           <div className="rt-shadow" />
           {!wrapped && (
-            <div className="rt-bob">
+            <div className={`rt-bob${shiny ? ' shiny' : ''}`}>
               <OddieArt speciesId={speciesId} name={species.name} types={species.types} size={SIZE} />
             </div>
           )}
@@ -187,6 +198,18 @@ export function CatchScreen({ speciesId, level, region, status, ropes: startRope
           {wrapped && <div key={shake} className={`catch-wrapped${shake ? ' shake' : ''}`} />}
         </div>
         {msg && <div className="rt-banner">{msg}</div>}
+        {!msg && phase === 'aim' && <div className="catch-note">이겨서 경험치를 받았어요 — 이제 로프로 잡아 봐!</div>}
+        {caughtFx && isNew && <div className="catch-new" aria-hidden>새로 등록!</div>}
+        {caughtFx && (
+          <div className="catch-team" aria-label="팀">
+            {team.slice(0, 6).map((o, i) => (
+              <span key={i} className={o.shiny ? 'shiny' : ''}><OddieArt speciesId={o.speciesId} name="" types={speciesById(o.speciesId).types} size={36} /></span>
+            ))}
+            {team.length < 6
+              ? <span className={`hop${shiny ? ' shiny' : ''}`}><OddieArt speciesId={speciesId} name={species.name} types={species.types} size={36} /></span>
+              : <span className="hop box">박스로</span>}
+          </div>
+        )}
         <div
           className="catch-pad" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
           onPointerCancel={() => { trail.current = []; }} onContextMenu={(e) => e.preventDefault()}

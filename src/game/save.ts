@@ -1,5 +1,7 @@
 import { cleanDex, dexFromOwned, emptyDex, type Dex } from './dex.ts';
 import { MAX_TEAM, type OwnedOddie } from './owned.ts';
+import { parseQuests, type QuestState } from './quests.ts';
+import type { Combo } from './fun.ts';
 
 export const SAVE_KEY = 'oddie-world-save-v1'; // 키는 그대로 두고 version 필드로 구분한다
 export const SAVE_AT_KEY = 'oddie-world-save-at'; // 이 기기에서 마지막으로 저장한 시각(ms)
@@ -54,6 +56,10 @@ export interface SaveData {
   beaten: string[];
   flags: string[];
   respawn: Respawn;
+  /** 퀘스트 게시판(없으면 처음 볼 때 만든다) */
+  quests?: QuestState;
+  /** 같은 종 연속 잡기 */
+  combo?: Combo;
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -86,10 +92,12 @@ const parseStrings = (value: unknown): string[] =>
 
 function parseOddie(value: unknown): OwnedOddie | null {
   if (typeof value !== 'object' || value === null) return null;
-  const { speciesId, level, exp } = value as Record<string, unknown>;
+  const { speciesId, level, exp, shiny } = value as Record<string, unknown>;
   if (!isCount(speciesId) || speciesId < 1 || speciesId > 999) return null;
   if (!isCount(level) || level < 1 || level > 100) return null;
-  return { speciesId, level, exp: isCount(exp) ? exp : 0 };
+  const oddie: OwnedOddie = { speciesId, level, exp: isCount(exp) ? exp : 0 };
+  if (shiny === true) oddie.shiny = true;
+  return oddie;
 }
 
 function parseOddies(value: unknown, max: number): OwnedOddie[] {
@@ -141,6 +149,10 @@ export function parseSave(raw: string | null): SaveData | null {
       base.flags = parseStrings(data.flags);
       const r = data.respawn as Record<string, unknown> | undefined;
       if (r && typeof r.map === 'string' && r.map && isCount(r.x) && isCount(r.y)) base.respawn = { map: r.map, x: r.x, y: r.y };
+      const quests = parseQuests(data.quests);
+      if (quests) base.quests = quests;
+      const c = data.combo as Record<string, unknown> | undefined;
+      if (c && isCount(c.speciesId) && c.speciesId >= 1 && isCount(c.count) && c.count >= 1) base.combo = { speciesId: c.speciesId, count: Math.min(c.count, 999) };
     }
     return base;
   } catch {

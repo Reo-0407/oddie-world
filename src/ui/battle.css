@@ -108,3 +108,30 @@
   .rt-enter-foe, .rt-enter-me, .rt-banner, .rt-dodge, .rt-wave, .rt-flash { animation-duration: 0.01ms; animation-delay: 0s; }
   .rt.warn { animation: none; }
 }
+
+/* 예고 "!"가 빨갛게 커지면 지금 피할 때 */
+.rt-bang.now { color: #fff; background: #ef3b2c; border-radius: 50%; width: 64px; height: 64px; line-height: 64px; text-align: center; transform: translateX(-50%) scale(1.15); animation: none; box-shadow: 0 0 20px #ef3b2c; }
+.rt-status.rt-strong { background: #c8402a; }
+.rt-foe.strong::before { content: ''; position: absolute; inset: 8%; border-radius: 50%; background: radial-gradient(circle, rgba(255,80,40,.45), transparent 65%); animation: rt-aura 1s ease-in-out infinite alternate; }
+@keyframes rt-aura { from { transform: scale(0.9); opacity: 0.6; } to { transform: scale(1.1); opacity: 1; } }
+/* 반짝이 등장: 별가루가 퍼진다 */
+.rt-sparkles { position: absolute; inset: 0; pointer-events: none; }
+.rt-sparkles i { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px; background: #fff3a0; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  animation: rt-spark 1.4s ease-out calc(var(--i) * 60ms) 2 both; transform: rotate(calc(var(--i) * 36deg)) translateY(0); }
+@keyframes rt-spark { 0% { opacity: 0; transform: rotate(calc(var(--i) * 36deg)) translateY(0) scale(0.3); } 30% { opacity: 1; } 100% { opacity: 0; transform: rotate(calc(var(--i) * 36deg)) translateY(-140px) scale(1); } }
+/* 잡기 화면 */
+.catch-combo { margin-left: 8px; padding: 1px 8px; border-radius: 8px; background: #ff7a2f; color: #fff; font-style: normal; font-size: 0.85em; }
+.catch-note { position: absolute; left: 50%; top: 4px; transform: translateX(-50%); width: max-content; max-width: 92%; padding: 6px 12px; border-radius: 10px;
+  background: rgba(255,255,255,.88); color: #23262b; font-size: 0.85rem; font-weight: 700; text-align: center; pointer-events: none; }
+.catch-new { position: absolute; left: 50%; top: 14%; transform: translateX(-50%); padding: 6px 18px; border-radius: 12px; background: #e0523f; color: #fff;
+  border: 3px solid #23262b; font-size: 1.4rem; font-weight: 900; box-shadow: 0 4px 0 #23262b; animation: catch-new 0.6s cubic-bezier(.2,.9,.3,1.5) both; pointer-events: none; }
+@keyframes catch-new { from { transform: translateX(-50%) scale(0.2) rotate(-10deg); } to { transform: translateX(-50%) scale(1) rotate(-3deg); } }
+.catch-team { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); display: flex; gap: 4px; padding: 6px 10px; border-radius: 14px; background: rgba(20,22,28,.7); pointer-events: none; }
+.catch-team span { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.85); overflow: hidden; }
+.catch-team .oddie-art { width: 36px; height: 36px; font-size: 0.6rem; border: 0; }
+.catch-team .hop { box-shadow: 0 0 0 3px #ffd24a; animation: catch-hop 0.9s cubic-bezier(.3,1.6,.5,1) 0.3s both; }
+.catch-team .hop.box { width: auto; padding: 0 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 800; }
+@keyframes catch-hop { 0% { transform: translateY(-120px) scale(0.4); opacity: 0; } 60% { transform: translateY(6px) scale(1.1); opacity: 1; } 80% { transform: translateY(-8px); } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .rt-sparkles i, .catch-new, .catch-team .hop, .rt-foe.strong::before { animation: none; }
+}

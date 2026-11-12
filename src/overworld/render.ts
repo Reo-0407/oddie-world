@@ -6,6 +6,8 @@ import { drawTile, kindOf, TILE } from './tiles.ts';
 import { mapHeight, mapWidth, tilesOf } from './world.ts';
 import { speciesById } from '../data/index.ts';
 import { thumbUrl, typeColor } from '../ui/OddieArt.tsx';
+import type { LevelTag } from '../game/fun.ts';
+import type { Tint } from '../game/daytime.ts';
 
 export interface Actor {
   /** 픽셀 좌표(타일 * 32, 걷는 중이면 중간값) */
@@ -29,6 +31,13 @@ export interface MonActor {
   bubble?: 'notice' | 'heart' | null;
   /** 0~1: 나타나기/사라지기(펑) 크기 */
   scale?: number;
+  /** 머리 위 레벨 표(색은 내 선두와 비교, 'me'는 따라오는 내 오디) */
+  level?: number;
+  tag?: LevelTag | 'me';
+  /** 반짝이(금빛) */
+  shiny?: boolean;
+  /** 강한 야생 오디: 붉은 기운 */
+  strong?: boolean;
 }
 
 export interface Scene {
@@ -44,6 +53,8 @@ export interface Scene {
   /** 0~1 검은 막, 0~1 흰 번쩍임 */
   fade: number;
   flash: number;
+  /** 바깥 지도의 낮·밤 색(a=0이면 없음) */
+  tint?: Tint;
 }
 
 export type ParticleKind = 'leaf' | 'dust' | 'poof' | 'sparkle' | 'heart';
@@ -74,17 +85,18 @@ const charImage = (a: Actor) =>
 
 export const MON_PX = 44;
 /** 오디 썸네일을 MON_PX로 부드럽게 줄여 둔다(좌우 두 벌). 그림이 없거나 아직이면 타입색 방울 */
-const monCache = new Map<number, { img: HTMLCanvasElement; flip: HTMLCanvasElement } | 'loading'>();
-function monImage(id: number, flip: boolean): HTMLCanvasElement {
+type MonImgs = { img: HTMLCanvasElement; flip: HTMLCanvasElement; gold: HTMLCanvasElement; goldFlip: HTMLCanvasElement };
+const monCache = new Map<number, MonImgs | 'loading'>();
+function monImage(id: number, flip: boolean, shiny = false): HTMLCanvasElement {
   const got = monCache.get(id);
-  if (got && got !== 'loading') return flip ? got.flip : got.img;
+  if (got && got !== 'loading') return shiny ? (flip ? got.goldFlip : got.gold) : flip ? got.flip : got.img;
   if (!got) {
     const url = thumbUrl(id);
     if (url) {
       monCache.set(id, 'loading');
       const im = new Image();
       im.onload = () => {
-        const make = (f: boolean) => {
+        const make = (f: boolean, gold = false) => {
           const cv = document.createElement('canvas');
           cv.width = MON_PX; cv.height = MON_PX;
           const c = cv.getContext('2d')!;
@@ -92,20 +104,23 @@ function monImage(id: number, flip: boolean): HTMLCanvasElement {
           c.imageSmoothingQuality = 'high';
           if (f) { c.translate(MON_PX, 0); c.scale(-1, 1); }
           // 썸네일이 어두워 풀밭에서 묻히므로 밝게 하고 흰 테두리를 둘러 눈에 띄게 한다
-          c.filter = 'brightness(1.3) saturate(1.25) drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff)';
+          c.filter = gold
+            // 반짝이: 금빛으로 물들이고 노란 테두리
+            ? 'sepia(1) saturate(3.2) hue-rotate(-12deg) brightness(1.35) drop-shadow(0 0 1px #fff3a0) drop-shadow(0 0 1px #ffd24a)'
+            : 'brightness(1.3) saturate(1.25) drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff)';
           c.drawImage(im, 2, 2, MON_PX - 4, MON_PX - 4);
           return cv;
         };
-        monCache.set(id, { img: make(false), flip: make(true) });
+        monCache.set(id, { img: make(false), flip: make(true), gold: make(false, true), goldFlip: make(true, true) });
       };
       im.onerror = () => monCache.delete(id);
       im.src = url;
     }
   }
-  return sprite(`blob${id}`, MON_PX, MON_PX, (c) => {
+  return sprite(`blob${id}${shiny ? 'g' : ''}`, MON_PX, MON_PX, (c) => {
     const sp = speciesById(id);
-    const a = typeColor(sp.types[0]);
-    const b = typeColor(sp.types[1] ?? sp.types[0]);
+    const a = shiny ? '#ffd24a' : typeColor(sp.types[0]);
+    const b = shiny ? '#fff3a0' : typeColor(sp.types[1] ?? sp.types[0]);
     c.fillStyle = '#2b2024'; c.beginPath(); c.arc(15, 17, 12, 0, Math.PI * 2); c.fill();
     c.fillStyle = a; c.beginPath(); c.arc(15, 17, 11, 0, Math.PI * 2); c.fill();
     c.fillStyle = b; c.fillRect(7, 19, 16, 4);
@@ -115,6 +130,17 @@ function monImage(id: number, flip: boolean): HTMLCanvasElement {
 }
 
 const OUTDOOR = new Set(OUTDOORS.map((m) => m.id));
+const TAG_COLOR: Record<LevelTag | 'me', string> = { red: '#ff5a4a', yellow: '#ffd24a', green: '#5ad86a', me: '#7fd8ff' };
+/** 밤에 창문·횃불·가로등 둘레를 밝히는 따뜻한 빛(미리 그려 둔다) */
+const glowImage = () => sprite('glow', 64, 64, (c) => {
+  const g = c.createRadialGradient(32, 32, 2, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,214,120,0.9)');
+  g.addColorStop(0.4, 'rgba(255,170,70,0.35)');
+  g.addColorStop(1, 'rgba(255,150,50,0)');
+  c.fillStyle = g;
+  c.fillRect(0, 0, 64, 64);
+});
+const GLOW_KINDS = new Set(['window', 'torch', 'light', 'lava']);
 const MAX_PARTICLES = 90;
 
 /** 화면에 보이는 크기를 정수 배율로 맞춰 또렷하게 그리는 렌더러 */
@@ -211,6 +237,8 @@ export function createRenderer(canvas: HTMLCanvasElement) {
     const y0 = Math.floor(camY / TILE);
     const x1 = Math.floor((camX + viewW) / TILE);
     const y1 = Math.floor((camY + viewH) / TILE);
+    const night = outdoor && s.tint ? s.tint.a : 0;
+    const glows: { x: number; y: number; k: string }[] = [];
     for (let ty2 = y0; ty2 <= y1; ty2 += 1) {
       for (let tx2 = x0; tx2 <= x1; tx2 += 1) {
         const inside = tx2 >= 0 && ty2 >= 0 && tx2 < W && ty2 < H;
@@ -221,6 +249,7 @@ export function createRenderer(canvas: HTMLCanvasElement) {
         const t = tiles[cy][cx];
         const seed = (((tx2 * 7 + ty2 * 13) % 4) + 4) % 4;
         ctx.drawImage(tileImage(t, frameOf(t), s.map.region, seed), tx2 * TILE - camX, ty2 * TILE - camY);
+        if (night > 0.12 && inside && GLOW_KINDS.has(kindOf(t))) glows.push({ x: tx2, y: ty2, k: kindOf(t) });
       }
     }
 
@@ -263,9 +292,19 @@ export function createRenderer(canvas: HTMLCanvasElement) {
         ctx.fillRect(sx + 16 - sw / 2, sy + 27, sw, 3);
         ctx.fillRect(sx + 16 - sw / 2 + 2, sy + 26, sw - 4, 5);
         const size = Math.round(MON_PX * sc);
-        const img = monImage(m.speciesId, m.dir === 'right');
+        if (m.strong) {
+          // 강한 야생 오디: 발밑에서 붉은 기운이 일렁인다
+          const pulse = 0.35 + 0.2 * Math.sin(s.time / 180);
+          ctx.fillStyle = `rgba(255,70,40,${pulse})`;
+          ctx.beginPath();
+          ctx.ellipse(sx + 16, sy + 22 - hop / 2, 18 * sc, 14 * sc, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        const img = monImage(m.speciesId, m.dir === 'right', m.shiny);
         ctx.drawImage(img, sx + 16 - size / 2, sy + 30 - size - hop, size, size);
-        if (m.bubble) bubble(sx + 16, sy + 30 - size - hop - 2, m.bubble);
+        const top = sy + 30 - size - hop - 2;
+        if (m.bubble) bubble(sx + 16, top, m.bubble);
+        else if (m.level !== undefined && sc > 0.9) levelTag(sx + 16, top + 4, m.level, m.tag ?? 'yellow', !!m.shiny);
       },
     });
     for (const n of s.npcs) person(n, false);
@@ -322,6 +361,23 @@ export function createRenderer(canvas: HTMLCanvasElement) {
       ctx.fillRect(0, 0, viewW, viewH);
     }
 
+    // 낮과 밤: 바깥 지도에만 은은하게. 밤엔 창문·횃불이 빛난다
+    if (outdoor && s.tint && s.tint.a > 0) {
+      ctx.fillStyle = `rgba(${s.tint.r},${s.tint.g},${s.tint.b},${s.tint.a})`;
+      ctx.fillRect(0, 0, viewW, viewH);
+      if (glows.length) {
+        const k = Math.min(1, (night - 0.12) / 0.25);
+        ctx.globalCompositeOperation = 'lighter';
+        for (const g of glows) {
+          const flick = g.k === 'torch' || g.k === 'lava' ? 0.8 + 0.2 * Math.sin(s.time / 90 + g.x * 3 + g.y) : 1;
+          ctx.globalAlpha = (g.k === 'lava' ? 0.25 : 0.55) * k * flick;
+          ctx.drawImage(glowImage(), g.x * TILE - camX - 16, g.y * TILE - camY - 16);
+        }
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    }
+
     if (s.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${s.flash})`; ctx.fillRect(0, 0, viewW, viewH); }
     if (s.fade > 0) { ctx.fillStyle = `rgba(0,0,0,${s.fade})`; ctx.fillRect(0, 0, viewW, viewH); }
   }
@@ -335,6 +391,27 @@ export function createRenderer(canvas: HTMLCanvasElement) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(x - 3, y - 1, 1, 1);
     ctx.globalAlpha = 1;
+  }
+
+  /** 머리 위 작은 "Lv.N" 표: 어두운 반투명 알약, 흰 글씨, 왼쪽 점 색이 강함(빨강·노랑·초록) */
+  function levelTag(cx: number, bottom: number, level: number, tag: LevelTag | 'me', shiny: boolean) {
+    const text = `${shiny ? '✦' : ''}Lv.${level}`;
+    ctx.font = 'bold 7px system-ui, sans-serif';
+    const w = Math.ceil(ctx.measureText(text).width) + 11;
+    const h = 10;
+    const x = Math.round(cx - w / 2);
+    const y = bottom - h;
+    ctx.fillStyle = 'rgba(20,22,28,0.72)';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, 5); else ctx.rect(x, y, w, h);
+    ctx.fill();
+    ctx.fillStyle = TAG_COLOR[tag];
+    ctx.beginPath();
+    ctx.arc(x + 5, y + h / 2, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = shiny ? '#fff3a0' : '#ffffff';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + 8.5, y + h / 2 + 0.5);
   }
 
   /** 머리 위 말풍선(픽셀로 그린다): "!" 또는 하트 */

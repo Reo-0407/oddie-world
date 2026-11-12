@@ -6,6 +6,7 @@ import { OddieArt, typeColor } from './OddieArt.tsx';
 import { SoundToggle } from './SoundToggle.tsx';
 import { expToNext, MAX_LEVEL } from '../game/growth.ts';
 import { BADGE_NAMES, BADGE_ORDER } from '../overworld/encounters.ts';
+import { questText, rewardText } from '../game/quests.ts';
 
 export const BADGE_COLORS = { meadow: '#3a9a4a', desert: '#e0892f', snow: '#4ab0d8', volcano: '#c8402a' } as const;
 
@@ -19,12 +20,13 @@ export interface MenuActions {
   onRestart(): void;
 }
 
-type Panel = 'main' | 'dex' | 'team' | 'bag' | 'badges' | 'account' | 'restart';
+type Panel = 'main' | 'dex' | 'team' | 'bag' | 'quest' | 'badges' | 'account' | 'restart';
 
 const ITEMS: { id: Exclude<Panel, 'main'> | 'online'; label: string; icon: string; color: string }[] = [
   { id: 'dex', label: '도감', icon: '▤', color: '#e0523f' },
   { id: 'team', label: '팀', icon: '●', color: '#3f78d8' },
   { id: 'bag', label: '가방', icon: '◆', color: '#e0892f' },
+  { id: 'quest', label: '퀘스트', icon: '!', color: '#2fa89a' },
   { id: 'badges', label: '배지', icon: '★', color: '#d8a520' },
   { id: 'online', label: '친구 대전', icon: '⚔', color: '#8a5ac8' },
   { id: 'account', label: '계정', icon: '☺', color: '#3a9a4a' },
@@ -32,8 +34,12 @@ const ITEMS: { id: Exclude<Panel, 'main'> | 'online'; label: string; icon: strin
 ];
 
 /** 포켓몬 고처럼 둥근 버튼으로 된 메뉴 */
-export function GameMenu({ data, actions, onData, onClose }: { data: SaveData; actions: MenuActions; onData(next: SaveData): void; onClose(): void }) {
-  const [panel, setPanel] = useState<Panel>('main');
+export function GameMenu({ data, actions, onData, onClose, start }: {
+  data: SaveData; actions: MenuActions; onData(next: SaveData): void; onClose(): void;
+  /** 처음 열 창(퀘스트 게시판에서 열 때) */
+  start?: 'quest';
+}) {
+  const [panel, setPanel] = useState<Panel>(start ?? 'main');
   const [picked, setPicked] = useState<number | null>(null);
   if (panel === 'dex') return <DexOverlay dex={data.dex} onClose={() => setPanel('main')} />;
 
@@ -55,6 +61,7 @@ export function GameMenu({ data, actions, onData, onClose }: { data: SaveData; a
                 style={{ background: `linear-gradient(160deg, ${a}, ${b})` }} onClick={() => setPicked(picked === i ? null : i)}
               >
                 {i === 0 && <em className="gm-lead">선두</em>}
+                {o.shiny && <em className="gm-shiny" aria-label="반짝이">✨</em>}
                 <OddieArt speciesId={o.speciesId} name={sp.name} types={sp.types} size={56} />
                 <b>{sp.name}</b><span>Lv.{o.level}</span>
                 <span className="gm-exp" aria-label={`경험치 ${Math.round(exp * 100)}%`}><i style={{ width: `${exp * 100}%` }} /></span>
@@ -84,6 +91,26 @@ export function GameMenu({ data, actions, onData, onClose }: { data: SaveData; a
           <li><span>튼튼한 로프</span><b>{data.ropes.sturdy}</b></li>
           <li><span>회복약</span><b>{data.potions}</b></li>
         </ul>
+        <p className="gm-where"><b>로프 얻는 곳</b> 상점(각 마을) · 숨은 반짝이 · 도감 5종 보상 · 퀘스트 보상 · 오디 센터(로프가 하나도 없을 때 3개 무료)</p>
+        {back}
+      </>
+    );
+  } else if (panel === 'quest') {
+    const list = data.quests?.list ?? [];
+    body = (
+      <>
+        <h2>퀘스트</h2>
+        {list.length === 0 && <p className="note">첫 오디를 받으면 퀘스트가 생겨요.</p>}
+        <ul className="gm-quests">
+          {list.map((q) => (
+            <li key={q.id}>
+              <b>{questText(q)}</b>
+              <span className="gm-qbar" aria-label={`${q.progress} / ${q.goal}`}><i style={{ width: `${(q.progress / q.goal) * 100}%` }} /></span>
+              <span className="gm-qrow"><span>{q.progress} / {q.goal}</span><span>{rewardText(q.reward)}</span></span>
+            </li>
+          ))}
+        </ul>
+        <p className="note">끝내면 보상을 받고 새 퀘스트가 생겨요{data.quests?.done ? ` · 지금까지 ${data.quests.done}개 완료` : ''}</p>
         {back}
       </>
     );

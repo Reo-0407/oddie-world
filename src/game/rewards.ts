@@ -30,6 +30,10 @@ interface SettleInput {
   alive: boolean[];
   wildSpeciesId: number;
   wildLevel: number;
+  /** 잡은 오디가 반짝이인가 */
+  wildShiny?: boolean;
+  /** 이겼을 때 경험치·코인 배율(강한 야생 오디 1.5) */
+  rewardScale?: number;
 }
 
 /** 전투 결과를 정산한다: 이기면 살아 있는 팀원이 경험치, 코인 지급. 잡으면 팀/박스에 추가 */
@@ -40,8 +44,9 @@ export function settleBattle(input: SettleInput): BattleReport {
     team: input.team.map((oddie) => ({ ...oddie })), box: input.box, caught: null,
   };
   if (input.outcome === 'won') {
-    report.exp = gainExp(input.wildLevel, wild.rarity);
-    report.coins = coinReward(input.wildLevel, wild.rarity);
+    const k = input.rewardScale ?? 1;
+    report.exp = Math.round(gainExp(input.wildLevel, wild.rarity) * k);
+    report.coins = Math.round(coinReward(input.wildLevel, wild.rarity) * k);
     report.team = input.team.map((oddie, index) => {
       if (!input.alive[index]) return { ...oddie };
       const species = speciesById(oddie.speciesId);
@@ -58,7 +63,7 @@ export function settleBattle(input: SettleInput): BattleReport {
     });
   }
   if (input.outcome === 'caught') {
-    const added = addCaught(report.team, report.box, { speciesId: wild.id, level: input.wildLevel, exp: 0 });
+    const added = addCaught(report.team, report.box, { speciesId: wild.id, level: input.wildLevel, exp: 0, ...(input.wildShiny ? { shiny: true } : {}) });
     report.team = added.team;
     report.box = added.box;
     report.caught = { name: wild.name, toBox: added.toBox, speciesId: wild.id };

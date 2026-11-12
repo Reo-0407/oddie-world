@@ -23,8 +23,8 @@ export interface Npc {
   choice?: { options: string[]; replies: string[][] };
   /** 트레이너: 바라보는 방향으로 sight칸 안에 들어오면 싸움을 건다 */
   trainer?: { sight: number; before: string[]; after: string[] };
-  /** 오디 센터 간호사(회복), 상점 점원(상점 창), 박사(스타터) */
-  role?: 'nurse' | 'clerk' | 'professor';
+  /** 오디 센터 간호사(회복), 상점 점원(상점 창), 박사(스타터), 퀘스트 게시판 안내원(퀘스트 창) */
+  role?: 'nurse' | 'clerk' | 'professor' | 'quest';
   /** 문지기: badges(전부)와 flag가 있어야 aside 칸으로 비켜선다. 막고 있을 때는 lines를 말한다 */
   gate?: { badges?: string[]; flag?: string; aside: { x: number; y: number }; open: string[] };
   /** 이 플래그가 있으면 lines 대신 말한다 */

@@ -480,3 +480,54 @@ button { transition: transform 0.08s, box-shadow 0.08s; }
   .wipe-wild.out, .wipe-trainer.out { animation: wipe-fade-out 0.4s both; }
   .wipe-wild i, .wipe-trainer b { display: none; }
 }
+
+/* ---------- 왼쪽 위 상태 표시(선두 레벨·코인·낮밤) ---------- */
+.gv-hud {
+  position: absolute; top: calc(56px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left)); z-index: 2;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: calc(100% - 20px); pointer-events: none;
+}
+.gv-chip {
+  position: relative; display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px 0 4px; border-radius: 15px;
+  background: rgba(20, 22, 28, 0.72); color: #fff; font-size: 0.82rem; font-weight: 800; box-shadow: 0 2px 6px rgba(0,0,0,.3);
+}
+.gv-lead .oddie-art { width: 26px; height: 26px; border-radius: 50%; border: 0; background: radial-gradient(circle, rgba(255,255,255,.85) 40%, rgba(255,255,255,.3) 70%); font-size: 0.6rem; }
+.gv-lead.shiny .oddie-art-img { filter: sepia(1) saturate(3) hue-rotate(-12deg) brightness(1.2); }
+.gv-exp { width: 46px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.2); overflow: hidden; }
+.gv-exp i { display: block; height: 100%; background: linear-gradient(#7fd8ff, #3aa0e0); transition: width 0.5s; }
+.gv-coins { padding-left: 6px; font-variant-numeric: tabular-nums; }
+.gv-coin { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff3a0, #f5c518 45%, #b8860b); box-shadow: inset 0 0 0 1.5px #8a6400; }
+.gv-coins.up { animation: gv-coin-bounce 0.5s cubic-bezier(.2,.9,.3,1.4); }
+.gv-coins.up .gv-coin { animation: gv-coin-flash 0.5s 2; }
+.gv-gain { position: absolute; left: 100%; top: 50%; margin-left: 4px; color: #ffd24a; font-style: normal; font-weight: 900; text-shadow: 0 1px 2px #000; white-space: nowrap; animation: gv-gain 1.4s ease-out forwards; }
+.gv-time { padding: 0 7px; font-size: 1rem; }
+@keyframes gv-coin-bounce { 0% { transform: scale(1); } 40% { transform: scale(1.18) translateY(-2px); } 100% { transform: none; } }
+@keyframes gv-coin-flash { 50% { box-shadow: inset 0 0 0 1.5px #8a6400, 0 0 10px #ffd24a; } }
+@keyframes gv-gain { 0% { transform: translateY(-50%); opacity: 0; } 15% { opacity: 1; } 100% { transform: translateY(-160%); opacity: 0; } }
+
+/* 반짝이: 금빛 그림 */
+.shiny .oddie-art-img, .rt-foe.shiny .oddie-art, .rt-me.shiny .oddie-art { filter: sepia(1) saturate(3) hue-rotate(-12deg) brightness(1.2) drop-shadow(0 0 6px #ffd24a); }
+.gm-shiny { position: absolute; top: 2px; right: 4px; font-style: normal; font-size: 0.9rem; }
+.dex-cell { position: relative; }
+.dex-shiny { position: absolute; top: 2px; right: 3px; font-size: 0.75rem; }
+
+/* 가방: 로프 얻는 곳 */
+.gm-where { margin: 0; padding: 8px 12px; border-radius: 10px; background: #fff3c4; border: 2px dashed #d8a520; font-size: 0.85rem; line-height: 1.5; }
+.gm-where b { display: block; }
+
+/* 퀘스트 창 */
+.gm-quests { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.gm-quests li { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 12px; background: #fff; border: 3px solid #23262b; box-shadow: 0 3px 0 #23262b; }
+.gm-qbar { height: 10px; border-radius: 5px; background: #e4e7ec; overflow: hidden; border: 1px solid #23262b; }
+.gm-qbar i { display: block; height: 100%; background: linear-gradient(#6fe0c8, #2fa89a); transition: width 0.4s; }
+.gm-qrow { display: flex; justify-content: space-between; gap: 8px; font-size: 0.78rem; opacity: 0.85; }
+.gm-qrow span:last-child { text-align: right; }
+
+/* 퀘스트 완료 */
+.fx-quest { position: fixed; inset: 0; z-index: 30; pointer-events: none; display: grid; place-items: center; }
+.fx-quest span {
+  position: absolute; top: 30%; padding: 8px 22px; border-radius: 14px; background: #2fa89a; color: #fff; border: 4px solid #23262b;
+  font-size: clamp(1.6rem, 7vw, 2.6rem); box-shadow: 0 5px 0 #23262b, 0 0 30px #6fe0c8; animation: fx-pop 1.8s cubic-bezier(.2,.9,.3,1.3) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gv-coins.up, .gv-coins.up .gv-coin, .gv-gain, .fx-quest span { animation: none; }
+}

@@ -28,7 +28,9 @@ export const centerRoom = (id: string, region: RegionId, out: Out) => room(id, '
   fill(g, 3, 5, 4, 2, 'r');
   put(g, 1, 4, 'b'); put(g, 1, 6, 'p'); put(g, 8, 4, 'b'); put(g, 8, 6, 'p');
 }, [{ id: `${id}-nurse`, name: '간호사', x: 4, y: 2, facing: 'down', look: look('#f283c1', '#ffffff', '#f283c1'), role: 'nurse',
-  lines: ['어서 오세요! 오디 센터예요.', '지친 오디들을 쉬게 해 드릴게요.'] }], out);
+  lines: ['어서 오세요! 오디 센터예요.', '지친 오디들을 쉬게 해 드릴게요.'] },
+{ id: `${id}-quest`, name: '퀘스트 안내원', x: 7, y: 4, facing: 'down', look: look('#d8a520', '#3a9a4a', '#2a4a2a', '#d8a520'), role: 'quest',
+  lines: ['퀘스트 게시판이에요!', '퀘스트를 끝내면 코인과 로프를 드려요.'] }], out);
 
 /** 오디 상점(점원이 상점 창을 연다). 들어오면 (3,6)에 선다. 진열대에 회복약·로프 */
 export const shopRoom = (id: string, region: RegionId, out: Out) => room(id, '오디 상점', region, 8, 8, '_', (g) => {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { sfx } from '../audio/audio.ts';
+import { jingle, sfx } from '../audio/audio.ts';
 import { BADGE_NAMES, BADGE_ORDER } from '../overworld/encounters.ts';
 import { BADGE_COLORS } from './GameMenu.tsx';
 
@@ -33,10 +33,12 @@ export function Dialog({ speaker, pages, choices, onDone, control }: Props) {
   // 레벨 업·배지 문구가 나오면 축하 연출
   const badge = BADGE_ORDER.find((b) => text.startsWith(`${BADGE_NAMES[b]}를 받았다`));
   const levelUp = !badge && /레벨이 \d+\(으\)로 올랐다/.test(text);
+  const quest = text.startsWith('퀘스트 완료!');
   useEffect(() => {
     if (badge) sfx('badge');
+    else if (quest) jingle('quest');
     else if (levelUp) sfx('levelup');
-  }, [page, badge, levelUp]);
+  }, [page, badge, levelUp, quest]);
 
   useEffect(() => {
     if (!typing) return;
@@ -66,6 +68,7 @@ export function Dialog({ speaker, pages, choices, onDone, control }: Props) {
 
   return (
     <div className="dialog" role="dialog" aria-live="polite" onPointerDown={(e) => { e.stopPropagation(); control.current?.press(); }}>
+      {quest && <div key={`q${page}`} className="fx-quest" aria-hidden><span>QUEST CLEAR!</span></div>}
       {levelUp && <div key={`lv${page}`} className="fx-levelup" aria-hidden><span>LEVEL UP!</span></div>}
       {badge && (
         <div key={`bd${page}`} className="fx-badge" aria-hidden>

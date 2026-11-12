@@ -2,6 +2,7 @@ import { MOVES, speciesById } from '../data/index.ts';
 import { computeDamage } from '../engine/damage.ts';
 import type { Rng } from '../engine/rng.ts';
 import { changeStage } from '../engine/stages.ts';
+import { typeEffectiveness } from '../engine/typeChart.ts';
 import type { BattlePokemon, Move, StatKey, Status, TypeName } from '../engine/types.ts';
 import { createBattlePokemon } from '../game/factory.ts';
 import { potionHeal } from '../game/shop.ts';
@@ -28,6 +29,21 @@ export const HIT_ENERGY = 60;
 /** 트레이너 오디는 에너지를 반쯤 채운 채로 나온다(피하기가 의미 있게) */
 export const TRAINER_START_ENERGY = 50;
 export const POTION_COOLDOWN_MS = 3000;
+/** 야생 오디도 에너지를 조금 채운 채로 나온다(첫 필살기가 빨리 온다) */
+export const WILD_START_ENERGY = 20;
+/** 트레이너 이상은 필살기 예고 길이가 들쭉날쭉하다(빨개질 때 박자를 맞춰 피해야 한다) */
+export const BAIT_MS: [number, number] = [600, 1200];
+/** 상대가 교체한 뒤 다시 교체하기까지 */
+export const FOE_SWITCH_CD = { trainer: 12000, leader: 8000, champion: 7000 } as const;
+/** 피하는 걸 보고 기다렸다가 피하기가 끝나면 친다 */
+export const DODGE_WAIT_MS = 120;
+/** 레벨 차이 한 칸마다 피해 배율(야생전만, 높은 쪽이 더 세게 때린다, ±10레벨까지) */
+export const LEVEL_GAP = 1.12;
+/** 야생 오디의 공격 배율(야생은 1:1 승부라 조금 세게) */
+export const WILD_POWER = 1.4;
+
+/** 상대의 머리: 야생 < 트레이너 < 관장 < 챔피언 */
+export type AiTier = 'wild' | 'trainer' | 'leader' | 'champion';
 
 /** 기술이 하나도 없거나 전부 변화 기술일 때 쓰는 기본 공격 */
 const STRUGGLE: Move = { id: 0, name: '몸통박치기', type: 'normal', category: 'physical', power: 40, accuracy: 100, priority: 0, effects: [] };
@@ -46,7 +62,8 @@ export interface Fighter {
 
 export type SideKey = 'me' | 'foe';
 export type RtKind = 'wild' | 'trainer';
-export type RtResult = 'won' | 'lost' | 'fled';
+/** escaped: 야생전에서 내 오디가 쓰러져 야생 오디가 도망갔다 */
+export type RtResult = 'won' | 'lost' | 'fled' | 'escaped';
 
 export type RtEvent =
   /** side = 맞은 쪽 */
@@ -60,6 +77,8 @@ export type RtEvent =
   | { t: 'faint'; side: SideKey; name: string }
   | { t: 'send'; side: SideKey; name: string }
   | { t: 'dodge' }
+  /** 상대가 물건을 썼다(관장·챔피언의 회복약) */
+  | { t: 'item'; side: SideKey; name: string }
   | { t: 'end'; result: RtResult };
 
 export interface RtState {
@@ -81,6 +100,13 @@ export interface RtState {
   /** 상대 필살기 예고 중이면 남은 시간과 기술 번호 */
   telegraph: { ms: number; charged: number } | null;
   result: RtResult | null;
+  ai: AiTier;
+  /** 상대 교체 쿨타임 */
+  foeSwitchCd: number;
+  /** 관장·챔피언이 회복약을 썼나(한 판에 한 번) */
+  foePotionUsed: boolean;
+  /** 최근에 상대가 받은 피해(최대 체력 비율, 서서히 줄어든다): 세게 맞으면 능력 낮추기 기술을 고른다 */
+  pressure: number;
   /** 이번 tick에 일어난 일(화면 연출용) */
   events: RtEvent[];
 }
@@ -120,21 +146,77 @@ export const powerOf = (mon: BattlePokemon) => {
   return Math.floor((s.hp + s.atk + s.def + s.spa + s.spd + s.spe) * 1.5);
 };
 
-/** 상대 행동 간격: 상대가 빠를수록 짧다(1.0~2.0초) */
+/** 레벨 차이 배율: 상대가 높을수록 빨리(레벨당 5%, 0.7~1.2배) */
+export const levelPace = (me: BattlePokemon, foe: BattlePokemon) => Math.min(1.2, Math.max(0.7, 1 - 0.05 * (foe.level - me.level)));
+
+/** 상대 행동 간격: 상대가 빠를수록(1.0~1.6초), 레벨이 높을수록 짧다 */
 export function foeInterval(me: BattlePokemon, foe: BattlePokemon): number {
   const ratio = me.stats.spe / Math.max(1, foe.stats.spe);
-  const ms = 1500 * ratio * (foe.status === 'paralysis' ? 1.5 : 1);
-  return Math.round(Math.min(FOE_MAX_MS, Math.max(FOE_MIN_MS, ms)));
+  const ms = Math.min(FOE_MAX_MS, Math.max(FOE_MIN_MS, 1500 * ratio)) * levelPace(me, foe) * (foe.status === 'paralysis' ? 1.5 : 1);
+  return Math.round(ms);
+}
+
+/** 이 기술로 줄 피해의 어림값(난수·급소 없이): 위력 × 자속 × 상성 × 공/방 */
+export function expectedDamage(att: BattlePokemon, def: BattlePokemon, move: Move): number {
+  const phys = move.category === 'physical';
+  const a = phys ? att.stats.atk : att.stats.spa;
+  const d = phys ? def.stats.def : def.stats.spd;
+  const stab = att.types.includes(move.type) ? 1.5 : 1;
+  return move.power * stab * goEffectiveness(typeEffectiveness(move.type, def.types)) * (a / Math.max(1, d));
+}
+
+/** 내 공격을 약하게 하거나 자기를 단단하게 하는 기술인가 */
+const defensive = (m: Move) => m.effects.some((e) => e.kind === 'stage'
+  && ((e.target === 'foe' && e.delta < 0 && (e.stat === 'atk' || e.stat === 'spa')) || (e.target === 'self' && e.delta > 0 && (e.stat === 'def' || e.stat === 'spd'))));
+
+/**
+ * 상대가 쓸 필살기 번호. null이면 이번엔 기본 공격.
+ * 야생: 첫 기술이 차면 바로. 트레이너 이상: 기대 피해가 가장 큰 기술(세게 맞는 중이면 능력 낮추기 기술 우대),
+ * 훨씬 센 기술이 조금만 더 모으면 되면 아껴 둔다
+ */
+export function chooseCharged(foe: Fighter, target: BattlePokemon, tier: AiTier, pressure = 0): number | null {
+  const moves = foe.charged;
+  if (!moves.length) return null;
+  if (tier === 'wild') return foe.energy >= energyCost(moves[0]) ? 0 : null;
+  const score = (m: Move) => expectedDamage(foe.mon, target, m) * (pressure > 0.3 && defensive(m) ? 1.4 : 1);
+  let best = -1;
+  let top = 0;
+  moves.forEach((m, i) => {
+    if (score(m) > score(moves[top])) top = i;
+    if (foe.energy >= energyCost(m) && (best < 0 || score(m) > score(moves[best]))) best = i;
+  });
+  if (best < 0) return null;
+  const strong = moves[top];
+  if (top !== best && score(strong) >= score(moves[best]) * 1.25 && foe.energy >= energyCost(strong) - 25) return null;
+  return best;
+}
+
+/** a가 b를 상대로 얼마나 유리한가(1보다 크면 유리): 서로 줄 수 있는 최대 피해 비율의 비 */
+export function matchup(a: Fighter, b: Fighter): number {
+  const hit = (x: Fighter, y: Fighter) => Math.max(...[x.fast, ...x.charged].map((m) => expectedDamage(x.mon, y.mon, m))) / Math.max(1, y.mon.stats.hp);
+  return hit(a, b) / Math.max(0.0001, hit(b, a));
+}
+
+/** 서 있는 상대 오디 중 내 지금 오디를 가장 잘 상대하는 쪽(없으면 -1) */
+export function bestCounter(foes: Fighter[], mine: Fighter, except = -1): number {
+  let best = -1;
+  foes.forEach((f, i) => {
+    if (i === except || f.mon.hp <= 0) return;
+    if (best < 0 || matchup(f, mine) > matchup(foes[best], mine)) best = i;
+  });
+  return best;
 }
 
 export function createRealtime(
   kind: RtKind, team: { speciesId: number; level: number }[], foes: { speciesId: number; level: number }[], potions = 0,
+  ai: AiTier = kind === 'wild' ? 'wild' : 'trainer',
 ): RtState {
   const me = team.map((o) => makeFighter(o.speciesId, o.level));
-  const foe = foes.map((o) => ({ ...makeFighter(o.speciesId, o.level), energy: kind === 'trainer' ? TRAINER_START_ENERGY : 0 }));
+  const foe = foes.map((o) => ({ ...makeFighter(o.speciesId, o.level), energy: kind === 'trainer' ? TRAINER_START_ENERGY : WILD_START_ENERGY }));
   return {
     kind, me, foe, myActive: 0, foeActive: 0, fastCd: 0, switchCd: 0, dodgeMs: 0, potions, potionCd: 0,
     foeNextMs: foeInterval(me[0].mon, foe[0].mon), telegraph: null, result: null, events: [],
+    ai, foeSwitchCd: 5000, foePotionUsed: false, pressure: 0,
   };
 }
 
@@ -162,10 +244,13 @@ function strike(s: RtState, by: SideKey, move: Move, charged: boolean, rng: Rng)
   const immune = raw.effectiveness === 0;
   const base = immune ? computeDamage(att.mon, { ...def.mon, types: [] }, move, rng, { power }) : raw;
   const effectiveness = goEffectiveness(raw.effectiveness);
-  const r = { ...base, effectiveness, damage: Math.max(1, Math.floor((base.damage * effectiveness) / base.effectiveness)) };
+  const gap = s.kind !== 'wild' ? 1 : LEVEL_GAP ** Math.max(-10, Math.min(10, att.mon.level - def.mon.level));
+  const wildBoost = by === 'foe' && s.kind === 'wild' ? WILD_POWER : 1;
+  const r = { ...base, effectiveness, damage: Math.max(1, Math.floor((base.damage * effectiveness * gap * wildBoost) / base.effectiveness)) };
   const dodged = target === 'me' && s.dodgeMs > 0;
   const amount = Math.min(def.mon.hp, dodged ? Math.max(1, Math.floor(r.damage * (1 - DODGE_REDUCTION))) : r.damage);
   def.mon.hp -= amount;
+  if (target === 'foe') s.pressure += amount / def.mon.stats.hp;
   if (!charged) att.energy = Math.min(MAX_ENERGY, att.energy + FAST_ENERGY);
   def.energy = Math.min(MAX_ENERGY, def.energy + Math.round((amount / def.mon.stats.hp) * HIT_ENERGY));
   s.events.push({ t: 'hit', side: target, amount, hp: def.mon.hp, type: move.type, charged, dodged, effectiveness: r.effectiveness, critical: r.critical, move: move.name });
@@ -201,7 +286,14 @@ function settleFaints(s: RtState) {
     const cur = activeOf(s, side);
     if (cur.mon.hp > 0) continue;
     s.events.push({ t: 'faint', side, name: cur.mon.name });
-    const next = team.findIndex((f) => f.mon.hp > 0);
+    // 트레이너 이상은 내 오디를 가장 잘 상대하는 오디를 내보낸다
+    const next = side === 'foe' && s.ai !== 'wild' ? bestCounter(team, activeOf(s, 'me')) : team.findIndex((f) => f.mon.hp > 0);
+    // 야생은 1:1 승부: 내 오디가 쓰러지면 야생 오디는 도망간다(전멸 벌칙 없음)
+    if (side === 'me' && s.kind === 'wild') {
+      s.result = 'escaped';
+      s.events.push({ t: 'end', result: s.result });
+      return;
+    }
     const canNext = next >= 0 && (side === 'me' || s.kind === 'trainer');
     if (!canNext) {
       s.result = side === 'me' ? 'lost' : 'won';
@@ -211,6 +303,7 @@ function settleFaints(s: RtState) {
     if (side === 'me') s.myActive = next;
     else s.foeActive = next;
     s.telegraph = null;
+    s.pressure = 0;
     s.foeNextMs = foeInterval(activeOf(s, 'me').mon, activeOf(s, 'foe').mon);
     s.events.push({ t: 'send', side, name: team[next].mon.name });
   }
@@ -234,6 +327,62 @@ function tickStatus(s: RtState, side: SideKey, dt: number) {
   }
 }
 
+/** 상대 행동: 일정 간격으로 기본 공격, 에너지가 차면 예고 뒤 필살기. 트레이너 이상은 교체·회복약·박자 바꾸기 */
+function foeAct(s: RtState, dt: number, rng: Rng) {
+  let foe = activeOf(s, 'foe');
+  const me = activeOf(s, 'me');
+  const smart = s.ai !== 'wild';
+  if (s.telegraph) {
+    s.telegraph.ms -= dt;
+    if (s.telegraph.ms <= 0) {
+      const move = foe.charged[s.telegraph.charged];
+      s.telegraph = null;
+      foe.energy = Math.max(0, foe.energy - energyCost(move));
+      s.events.push({ t: 'charged', side: 'foe', move: move.name, type: move.type });
+      strike(s, 'foe', move, true, rng);
+      s.foeNextMs = foeInterval(me.mon, foe.mon);
+    }
+    return;
+  }
+  // 관장·챔피언: 체력이 25% 아래면 회복약 한 번
+  if ((s.ai === 'leader' || s.ai === 'champion') && !s.foePotionUsed && foe.mon.hp > 0 && foe.mon.hp < foe.mon.stats.hp * 0.25) {
+    const healed = potionHeal(foe.mon.hp, foe.mon.stats.hp);
+    foe.mon.hp += healed;
+    s.foePotionUsed = true;
+    s.events.push({ t: 'item', side: 'foe', name: '회복약' }, { t: 'heal', side: 'foe', amount: healed, hp: foe.mon.hp });
+    s.foeNextMs = Math.max(s.foeNextMs, 700);
+    return;
+  }
+  // 트레이너 이상: 상성이 크게 불리하고 아직 건강하면 더 맞는 오디로 바꾼다
+  if (smart && s.kind === 'trainer' && s.foeSwitchCd === 0 && foe.mon.hp > foe.mon.stats.hp * 0.5) {
+    const now = matchup(foe, me);
+    const alt = bestCounter(s.foe, me, s.foeActive);
+    if (now < 0.6 && alt >= 0 && matchup(s.foe[alt], me) > now * 1.5) {
+      s.foeActive = alt;
+      s.foeSwitchCd = FOE_SWITCH_CD[s.ai as Exclude<AiTier, 'wild'>];
+      s.pressure = 0;
+      foe = s.foe[alt];
+      s.foeNextMs = foeInterval(me.mon, foe.mon) + 300;
+      s.events.push({ t: 'send', side: 'foe', name: foe.mon.name });
+      return;
+    }
+  }
+  if (foe.mon.status === 'sleep') return;
+  s.foeNextMs -= dt;
+  if (s.foeNextMs > 0) return;
+  // 트레이너 이상: 내가 피하는 중이면 피하기가 끝날 때까지 기다렸다 친다
+  if (smart && s.dodgeMs > 0) { s.foeNextMs = s.dodgeMs + DODGE_WAIT_MS; return; }
+  const pick = chooseCharged(foe, me.mon, s.ai, s.pressure);
+  if (pick !== null) {
+    s.telegraph = { ms: smart ? rng.int(BAIT_MS[0], BAIT_MS[1]) : TELEGRAPH_MS, charged: pick };
+    s.events.push({ t: 'telegraph', move: foe.charged[pick].name });
+    return;
+  }
+  strike(s, 'foe', foe.fast, false, rng);
+  // 트레이너 이상: 내 체력이 30% 아래면 몰아친다
+  s.foeNextMs = foeInterval(me.mon, foe.mon) * (smart && me.mon.hp < me.mon.stats.hp * 0.3 ? 0.75 : 1);
+}
+
 /** dtMs만큼 시간을 흘린다. rng는 전투 내내 같은 것을 쓴다 */
 export function tick(state: RtState, dtMs: number, input: RtInput, rng: Rng): RtState {
   if (state.result) return state.events.length ? { ...state, events: [] } : state;
@@ -243,6 +392,8 @@ export function tick(state: RtState, dtMs: number, input: RtInput, rng: Rng): Rt
   s.switchCd = Math.max(0, s.switchCd - dt);
   s.dodgeMs = Math.max(0, s.dodgeMs - dt);
   s.potionCd = Math.max(0, s.potionCd - dt);
+  s.foeSwitchCd = Math.max(0, s.foeSwitchCd - dt);
+  s.pressure = Math.max(0, s.pressure - dt / 5000);
 
   if (input.run && s.kind === 'wild') {
     s.result = 'fled';
@@ -286,31 +437,7 @@ export function tick(state: RtState, dtMs: number, input: RtInput, rng: Rng): Rt
   settleFaints(s);
   if (s.result) return s;
 
-  // 상대 행동: 일정 간격으로 기본 공격, 에너지가 차면 1초 예고 뒤 필살기
-  const foe = activeOf(s, 'foe');
-  if (s.telegraph) {
-    s.telegraph.ms -= dt;
-    if (s.telegraph.ms <= 0) {
-      const move = foe.charged[s.telegraph.charged];
-      s.telegraph = null;
-      foe.energy = Math.max(0, foe.energy - energyCost(move));
-      s.events.push({ t: 'charged', side: 'foe', move: move.name, type: move.type });
-      strike(s, 'foe', move, true, rng);
-      s.foeNextMs = foeInterval(activeOf(s, 'me').mon, foe.mon);
-    }
-  } else if (foe.mon.status !== 'sleep') {
-    s.foeNextMs -= dt;
-    if (s.foeNextMs <= 0) {
-      const move = foe.charged[0];
-      if (move && foe.energy >= energyCost(move)) {
-        s.telegraph = { ms: TELEGRAPH_MS, charged: 0 };
-        s.events.push({ t: 'telegraph', move: move.name });
-      } else {
-        strike(s, 'foe', foe.fast, false, rng);
-        s.foeNextMs = foeInterval(activeOf(s, 'me').mon, foe.mon);
-      }
-    }
-  }
+  foeAct(s, dt, rng);
   tickStatus(s, 'me', dt);
   tickStatus(s, 'foe', dt);
   settleFaints(s);

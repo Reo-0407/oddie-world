@@ -11,7 +11,10 @@ import { playMusic, sfx } from './audio/audio.ts';
 import type { TrackId } from './audio/tracks.ts';
 import { markSeen } from './game/dex.ts';
 import { newSave, START_LEVEL, type SaveData } from './game/save.ts';
-import { settleCatch, settleLoss, settleWin } from './battle/outcome.ts';
+import { questsAfter, settleCatch, settleLoss, settleWin } from './battle/outcome.ts';
+import { nextCombo } from './game/fun.ts';
+import { setHourOverride } from './game/daytime.ts';
+import { speciesById } from './data/index.ts';
 import type { RtResult } from './battle/realtime.ts';
 import { BADGE_NAMES, BADGE_ORDER, trainerById, type Trainer } from './overworld/encounters.ts';
 import { getMap } from './overworld/maps/index.ts';
@@ -19,11 +22,11 @@ import type { Status } from './engine/types.ts';
 import type { RegionId } from './overworld/regions.ts';
 import './ui/app.css';
 
-type Foe = { speciesId: number; level: number };
+type Foe = { speciesId: number; level: number; shiny?: boolean; strong?: boolean };
 type Fight =
   | { stage: 'fight'; kind: 'wild'; region: RegionId; foe: Foe }
   | { stage: 'fight'; kind: 'trainer'; region: RegionId; trainer: Trainer }
-  | { stage: 'catch'; region: RegionId; foe: Foe; status: Status | null; lines: string[] };
+  | { stage: 'catch'; region: RegionId; foe: Foe; status: Status | null; lines: string[]; isNew: boolean; combo: number };
 
 type Message = { speaker?: string; pages: string[] } | null;
 type Wipe = { kind: 'wild' | 'trainer' | 'fade'; phase: 'in' | 'out'; key: number };
@@ -82,7 +85,8 @@ export default function App() {
     const d = dataRef.current;
     if (!d || d.team.length === 0 || wiping.current) return; // 스타터가 없으면 조우도 없다
     save({ ...d, dex: markSeen(d.dex, info.speciesId) });
-    transition('wild', () => setFight({ stage: 'fight', kind: 'wild', region: info.region, foe: { speciesId: info.speciesId, level: info.level } }));
+    const foe: Foe = { speciesId: info.speciesId, level: info.level, ...(info.shiny ? { shiny: true } : {}), ...(info.strong ? { strong: true } : {}) };
+    transition('wild', () => setFight({ stage: 'fight', kind: 'wild', region: info.region, foe }));
   };
 
   // 개발 중 콘솔에서 전투·배지·순간이동을 바로 해 볼 수 있게 (배포 빌드에는 없다)
@@ -108,6 +112,8 @@ export default function App() {
         backToWorld(null);
         return true;
       },
+      /** 낮·밤 시험: __oddie.hour(22), 되돌리기 __oddie.hour(null) */
+      hour(h: number | null) { setHourOverride(h); },
     };
   }
 
@@ -124,6 +130,10 @@ export default function App() {
     if (!cur || !fight || fight.stage !== 'fight') return;
     const d = { ...cur, potions: potionsLeft }; // 전투 중 쓴 회복약
     if (result === 'fled') { save(d); return backToWorld(null); }
+    if (result === 'escaped' && fight.kind === 'wild') {
+      save(d);
+      return backToWorld({ pages: ['내 오디가 쓰러졌다…', `야생 ${speciesById(fight.foe.speciesId).name}은(는) 도망가 버렸다.`, '오디들은 잠깐 쉬면 다시 힘이 나요. 레벨이 높은 오디(빨간 Lv)는 조심!'] });
+    }
     if (result === 'lost') {
       const s = settleLoss(d);
       save(s.save);
@@ -132,8 +142,9 @@ export default function App() {
     if (fight.kind === 'trainer') {
       const tr = fight.trainer;
       const s = settleWin(d, alive, tr.team, tr);
-      const pages = [tr.lines.after, ...s.lines];
-      let next = s.save;
+      const q = questsAfter(s.save, { kind: 'beatTrainer' });
+      const pages = [tr.lines.after, ...s.lines, ...q.lines];
+      let next = q.save;
       if (tr.badge && !next.badges.includes(tr.badge)) {
         next = { ...next, badges: [...next.badges, tr.badge] };
         pages.push(`${BADGE_NAMES[tr.badge]}를 받았다!`);
@@ -145,26 +156,32 @@ export default function App() {
       save(next);
       return backToWorld({ speaker: tr.name, pages });
     }
-    const s = settleWin(d, alive, [fight.foe]);
+    const won = settleWin(d, alive, [fight.foe]);
+    const s = questsAfter(won.save, { kind: 'winWild' });
+    const lines = [...won.lines, ...s.lines];
     save(s.save);
     if (s.save.ropes.basic + s.save.ropes.sturdy > 0) {
       const f = fight;
-      transition('fade', () => setFight({ stage: 'catch', region: f.region, foe: f.foe, status: foeStatus, lines: s.lines }));
+      const isNew = !s.save.dex.caught.includes(f.foe.speciesId);
+      const combo = nextCombo(s.save.combo, f.foe.speciesId).count;
+      transition('fade', () => setFight({ stage: 'catch', region: f.region, foe: f.foe, status: foeStatus, lines, isNew, combo }));
     } else {
-      backToWorld({ pages: [...s.lines, '로프가 없어서 잡을 수 없었다…'] });
+      backToWorld({ pages: [...lines, '로프가 없어! 상점이나 오디 센터에서 구해 봐'] });
     }
   };
 
-  const onCatchEnd = (caught: boolean, ropes: SaveData['ropes']) => {
+  const onCatchEnd = (caught: boolean, ropes: SaveData['ropes'], excellent = 0) => {
     const d = dataRef.current;
     if (!d || !fight || fight.stage !== 'catch') return;
+    const ex = excellent > 0 ? questsAfter({ ...d, ropes }, { kind: 'excellent', n: excellent }) : { save: { ...d, ropes }, lines: [] };
     if (caught) {
-      const s = settleCatch(d, fight.foe, ropes);
-      save(s.save);
-      return backToWorld({ pages: [...fight.lines, ...s.lines] });
+      const s = settleCatch(ex.save, fight.foe, ropes);
+      const q = questsAfter(s.save, { kind: 'catch', types: speciesById(fight.foe.speciesId).types });
+      save(q.save);
+      return backToWorld({ pages: [...fight.lines, ...s.lines, ...ex.lines, ...q.lines] });
     }
-    save({ ...d, ropes });
-    backToWorld({ pages: fight.lines });
+    save(ex.save);
+    backToWorld({ pages: [...fight.lines, `${speciesById(fight.foe.speciesId).name}은(는) 도망갔다… 그래도 경험치는 받았어!`, ...ex.lines] });
   };
 
   // 지금 화면에 맞는 배경음악
@@ -222,6 +239,9 @@ export default function App() {
         team={data.team}
         foes={fight.kind === 'wild' ? [fight.foe] : fight.trainer.team}
         trainerName={fight.kind === 'trainer' ? fight.trainer.name : undefined}
+        ai={fight.kind === 'wild' ? 'wild' : fight.trainer.champion ? 'champion' : fight.trainer.badge ? 'leader' : 'trainer'}
+        shiny={fight.kind === 'wild' && !!fight.foe.shiny}
+        strong={fight.kind === 'wild' && !!fight.foe.strong}
         potions={data.potions}
         onEnd={onBattleEnd}
       />
@@ -230,7 +250,7 @@ export default function App() {
     screen = (
       <CatchScreen
         speciesId={fight.foe.speciesId} level={fight.foe.level} region={fight.region} status={fight.status}
-        ropes={data.ropes} onEnd={onCatchEnd}
+        ropes={data.ropes} onEnd={onCatchEnd} shiny={!!fight.foe.shiny} isNew={fight.isNew} combo={fight.combo} team={data.team}
       />
     );
   } else {

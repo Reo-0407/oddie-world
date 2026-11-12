@@ -6,6 +6,8 @@ export interface OwnedOddie {
   level: number;
   /** 현재 레벨에서 모은 경험치 */
   exp: number;
+  /** 반짝이 오디(금빛). 옛 저장에는 없다 */
+  shiny?: boolean;
 }
 
 /** 팀이 차 있으면 박스로 보낸다 */

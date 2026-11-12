@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../engine/rng.ts';
 import {
-  DODGE_MS, FAST_COOLDOWN_MS, FAST_ENERGY, FOE_MAX_MS, IMMUNE_SCALE, POTION_COOLDOWN_MS, SWITCH_COOLDOWN_MS, TELEGRAPH_MS, TRAINER_START_ENERGY,
+  DODGE_MS, FAST_COOLDOWN_MS, FAST_ENERGY, FOE_MAX_MS, IMMUNE_SCALE, POTION_COOLDOWN_MS, SWITCH_COOLDOWN_MS, TELEGRAPH_MS, TRAINER_START_ENERGY, WILD_START_ENERGY, levelPace,
   activeOf, createRealtime, energyCost, foeInterval, goEffectiveness, makeFighter, tick, type RtInput, type RtState,
 } from './realtime.ts';
 
@@ -60,12 +60,13 @@ describe('실시간 전투: 내 공격', () => {
 });
 
 describe('실시간 전투: 상대', () => {
-  it('상대 간격은 속도로 1.0~1.6초', () => {
+  it('상대 간격은 속도로 1.0~1.6초, 레벨이 높은 상대는 레벨당 5% 빨리(0.7~1.2배)', () => {
     const slow = makeFighter(1, 5).mon;
     const fast = makeFighter(1, 60).mon;
-    expect(foeInterval(slow, fast)).toBe(1000);
-    expect(foeInterval(fast, slow)).toBe(FOE_MAX_MS);
+    expect(foeInterval(slow, fast)).toBe(700);
+    expect(foeInterval(fast, slow)).toBe(FOE_MAX_MS * 1.2);
     expect(foeInterval(slow, slow)).toBe(1500);
+    expect(levelPace(slow, { ...slow, level: 8 })).toBeCloseTo(0.85);
   });
 
   it('에너지가 차면 1초 예고 뒤 필살기, 피하면 75% 덜 맞는다', () => {
@@ -94,9 +95,9 @@ describe('실시간 전투: 상대', () => {
 });
 
 describe('실시간 전투: 밸런스 규칙', () => {
-  it('트레이너 오디는 에너지 50으로 시작하고 야생은 0', () => {
+  it('트레이너 오디는 에너지 50으로, 야생은 20으로 시작한다', () => {
     expect(createRealtime('trainer', [{ speciesId: 1, level: 5 }], [{ speciesId: 2, level: 5 }]).foe[0].energy).toBe(TRAINER_START_ENERGY);
-    expect(wild().foe[0].energy).toBe(0);
+    expect(wild().foe[0].energy).toBe(WILD_START_ENERGY);
   });
 
   it('맞은 쪽도 받은 피해만큼 에너지가 찬다', () => {
@@ -105,7 +106,7 @@ describe('실시간 전투: 밸런스 규칙', () => {
     s = tick(s, 16, { fast: true }, rng);
     const hit = s.events.find((e) => e.t === 'hit' && e.side === 'foe');
     const foe = activeOf(s, 'foe');
-    expect(hit && hit.t === 'hit' && foe.energy).toBe(hit && hit.t === 'hit' ? Math.round((hit.amount / foe.mon.stats.hp) * 60) : -1);
+    expect(hit && hit.t === 'hit' && foe.energy).toBe(hit && hit.t === 'hit' ? WILD_START_ENERGY + Math.round((hit.amount / foe.mon.stats.hp) * 60) : -1);
   });
 
   it('면역 타입도 0.39배 피해(포켓몬 고 규칙)', () => {
@@ -167,11 +168,19 @@ describe('실시간 전투: 승패', () => {
     expect(s.result).toBe('won');
   });
 
-  it('내 오디가 다 쓰러지면 진다', () => {
+  it('트레이너전에서 내 오디가 다 쓰러지면 진다', () => {
     const rng = createRng(10);
-    let s = createRealtime('wild', [{ speciesId: 1, level: 3 }], [{ speciesId: 2, level: 50 }]);
-    for (let i = 0; i < 200 && !s.result; i += 1) s = tick(s, 100, {}, rng);
+    let s = createRealtime('trainer', [{ speciesId: 1, level: 3 }, { speciesId: 4, level: 3 }], [{ speciesId: 2, level: 50 }]);
+    for (let i = 0; i < 400 && !s.result; i += 1) s = tick(s, 100, {}, rng);
     expect(s.result).toBe('lost');
+  });
+
+  it('야생전은 1:1: 내 오디가 쓰러지면 (팀이 남아도) 야생 오디가 도망간다', () => {
+    const rng = createRng(10);
+    let s = createRealtime('wild', [{ speciesId: 1, level: 3 }, { speciesId: 4, level: 50 }], [{ speciesId: 2, level: 50 }]);
+    for (let i = 0; i < 200 && !s.result; i += 1) s = tick(s, 100, {}, rng);
+    expect(s.result).toBe('escaped');
+    expect(s.myActive).toBe(0);
   });
 
   it('공정함: 레벨 5 스타터가 기본 공격 + 필살기 + 피하기로 같은 레벨 초원 야생을 이긴다', () => {

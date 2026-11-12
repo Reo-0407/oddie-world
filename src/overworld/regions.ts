@@ -54,9 +54,11 @@ export interface SpawnCandidate {
 }
 
 /** 구역에 맞는 오디를 가중치로 뽑는다. rand는 0 이상 1 미만 난수 */
-export function pickSpeciesForRegion(region: RegionId, candidates: readonly SpawnCandidate[], rand: () => number): number {
+export function pickSpeciesForRegion(
+  region: RegionId, candidates: readonly SpawnCandidate[], rand: () => number, bias: (c: SpawnCandidate) => number = () => 1,
+): number {
   if (candidates.length === 0) throw new Error('뽑을 오디가 없음');
-  const weights = candidates.map((candidate) => speciesWeight(region, candidate.types, candidate.rarity));
+  const weights = candidates.map((candidate) => speciesWeight(region, candidate.types, candidate.rarity) * bias(candidate));
   const total = weights.reduce((sum, weight) => sum + weight, 0);
   let roll = rand() * total;
   for (let i = 0; i < candidates.length; i += 1) {

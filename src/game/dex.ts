@@ -4,6 +4,8 @@ import type { OwnedOddie } from './owned.ts';
 export interface Dex {
   seen: number[];
   caught: number[];
+  /** 반짝이로 잡은 종(옛 저장에는 없다) */
+  shinyCaught?: number[];
 }
 
 export type DexStatus = 'caught' | 'seen' | 'unknown';
@@ -25,14 +27,24 @@ export function markSeen(dex: Dex, id: number): Dex {
 export function markCaught(dex: Dex, id: number): Dex {
   const seen = insertSorted(dex.seen, id);
   const caught = insertSorted(dex.caught, id);
-  return seen === dex.seen && caught === dex.caught ? dex : { seen, caught };
+  return seen === dex.seen && caught === dex.caught ? dex : { ...dex, seen, caught };
+}
+
+/** 반짝이로 잡았다고 적는다(잡은 것으로도 적힌다) */
+export function markShiny(dex: Dex, id: number): Dex {
+  const base = markCaught(dex, id);
+  const list = base.shinyCaught ?? [];
+  const shinyCaught = insertSorted(list, id);
+  return shinyCaught === list && base.shinyCaught ? base : { ...base, shinyCaught };
 }
 
 /** 두 도감의 합집합 (저장 두 개를 합칠 때 기록이 줄지 않게) */
 export function mergeDex(a: Dex, b: Dex): Dex {
   const union = (x: number[], y: number[]) => [...new Set([...x, ...y])].sort((p, q) => p - q);
   const caught = union(a.caught, b.caught);
-  return { seen: union(union(a.seen, b.seen), caught), caught };
+  const merged: Dex = { seen: union(union(a.seen, b.seen), caught), caught };
+  if (a.shinyCaught?.length || b.shinyCaught?.length) merged.shinyCaught = union(a.shinyCaught ?? [], b.shinyCaught ?? []);
+  return merged;
 }
 
 /** 옛 저장(도감이 없던 때): 지금 팀과 박스에 있는 오디를 잡은 것으로 본다 */
@@ -65,7 +77,8 @@ export function cleanDex(value: unknown): Dex {
   const raw = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
   const caught = [...new Set(ids(raw.caught))].sort((a, b) => a - b);
   const seen = [...new Set([...ids(raw.seen), ...caught])].sort((a, b) => a - b);
-  return { seen, caught };
+  const shiny = [...new Set(ids(raw.shinyCaught))].filter((id) => caught.includes(id)).sort((a, b) => a - b);
+  return shiny.length ? { seen, caught, shinyCaught: shiny } : { seen, caught };
 }
 
 /** 새 종을 5마리 잡을 때마다 주는 도감 보상. 넘어간 칸마다 합쳐서 준다 */

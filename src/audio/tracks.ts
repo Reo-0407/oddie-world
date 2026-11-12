@@ -77,6 +77,12 @@ export const TRACKS = {
       { wave: 'triangle', vol: 0.9, notes: 'C3*3 G3*3 C4*6' },
     ],
   },
+  quest: {
+    bpm: 170, loop: false, channels: [
+      { wave: 'square', vol: 0.5, notes: 'G5 C6 E6 G6*2 E6 G6*5' },
+      { wave: 'triangle', vol: 0.9, notes: 'C4*2 E4*2 G3*2 C4*4' },
+    ],
+  },
   heal: {
     bpm: 140, loop: false, channels: [
       { wave: 'triangle', vol: 0.9, notes: 'C5*2 C5 C5 G4*2 E5*2 D5*2 C5*4' },

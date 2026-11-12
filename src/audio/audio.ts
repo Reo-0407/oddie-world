@@ -164,7 +164,7 @@ export function jingle(id: TrackId) {
 
 export type SfxId =
   | 'bump' | 'menuOpen' | 'menuClose' | 'blip' | 'confirm' | 'hit' | 'charge' | 'super' | 'faint'
-  | 'whoosh' | 'shake' | 'ding' | 'flee' | 'levelup' | 'badge';
+  | 'whoosh' | 'shake' | 'ding' | 'flee' | 'levelup' | 'badge' | 'shiny' | 'coin';
 
 const lastAt: Partial<Record<SfxId, number>> = {};
 const GAP: Partial<Record<SfxId, number>> = { bump: 0.28, blip: 0.045 };
@@ -193,6 +193,9 @@ export function sfx(id: SfxId) {
     case 'flee': [0, 0.08, 0.16].forEach((at) => v('square', 300, at, 0.08, 0.14, 1200)); break;
     case 'levelup': arp([1047, 1319, 1568, 2093], 0.07, 0.16); break;
     case 'badge': arp([784, 1047, 1319, 1568, 2093], 0.09, 0.16); v('triangle', 2093, 0.45, 0.6, 0.3); break;
+    // 반짝이: 높은 음이 반짝반짝 내려왔다 올라간다
+    case 'shiny': [3136, 2637, 3520, 4186, 3136, 4699].forEach((f, i) => v('triangle', f, i * 0.06, 0.18, 0.22)); v('noise', 9000, 0, 0.4, 0.08); break;
+    case 'coin': v('square', 1976, 0, 0.05, 0.1); v('square', 2637, 0.05, 0.12, 0.1); break;
   }
 }
 

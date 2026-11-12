@@ -98,7 +98,10 @@ export function DexOverlay({ dex, onClose }: Props) {
     <div className="panel-overlay" role="dialog" aria-label="오디 도감">
       <div className="panel dex-panel">
         <h2>오디 도감</h2>
-        <p className="coins">잡은 <strong>{progress.caught}</strong> / 만난 <strong>{progress.seen}</strong> / 전체 {progress.total}</p>
+        <p className="coins">
+          잡은 <strong>{progress.caught}</strong> / 만난 <strong>{progress.seen}</strong> / 전체 {progress.total}
+          {!!dex.shinyCaught?.length && <> · ✨ 반짝이 <strong>{dex.shinyCaught.length}</strong></>}
+        </p>
         {picked && pickedStatus !== 'unknown' ? (
           <Detail species={picked} caught={pickedStatus === 'caught'} onBack={() => setSelected(null)} />
         ) : (
@@ -115,6 +118,7 @@ export function DexOverlay({ dex, onClose }: Props) {
                     onClick={() => setSelected(species.id)}
                   >
                     <span className="dex-no">{number(species.id)}</span>
+                    {dex.shinyCaught?.includes(species.id) && <span className="dex-shiny" aria-label="반짝이로 잡음">✨</span>}
                     {status === 'unknown' ? (
                       <span className="dex-unknown">?</span>
                     ) : (

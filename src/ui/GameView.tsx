@@ -18,8 +18,14 @@ import { GameMenu, type MenuActions } from './GameMenu.tsx';
 import { ShopPanel } from './ShopPanel.tsx';
 import { StarterScreen } from './StarterScreen.tsx';
 import { jingle, sfx } from '../audio/audio.ts';
+import { dayPhase, nowHour, PHASE_ICON, PHASE_NAME, skyTint, type Tint } from '../game/daytime.ts';
+import { levelTag, NURSE_ROPES, nurseGivesRopes } from '../game/fun.ts';
+import { fillQuests } from '../game/quests.ts';
+import { expToNext, MAX_LEVEL } from '../game/growth.ts';
+import { questCtx, questsAfter } from '../battle/outcome.ts';
+import { OddieArt } from './OddieArt.tsx';
 
-export interface EncounterInfo { speciesId: number; level: number; region: RegionId }
+export interface EncounterInfo { speciesId: number; level: number; region: RegionId; shiny?: boolean; strong?: boolean }
 
 interface Props {
   data: SaveData;
@@ -59,7 +65,10 @@ const HEAL_MS = 900;
 
 type Anim = { fx: number; fy: number; t: number };
 /** 필드 위 야생 오디 한 마리의 실행 상태 */
-interface WildRt { mon: WildMon; anim: Anim | null; wait: number; seen: boolean; bubble: number; appear: number; leaving: number }
+interface WildRt {
+  mon: WildMon; anim: Anim | null; wait: number; seen: boolean; bubble: number; appear: number; leaving: number;
+  shiny: boolean; strong: boolean; sparkle: number;
+}
 const GIFT_NAME: Record<HiddenItem['gift'], string> = { rope: '로프', sturdy: '튼튼한 로프', potion: '회복약', coins: '코인' };
 const HAPPY = ['은(는) 기분이 좋아 보인다!', '은(는) 신나서 깡충 뛰었다!', '이(가) 너에게 꼭 붙어 왔다.', '은(는) 다음 모험이 기대되나 보다!'];
 const WILD_STEP_MS = 260;
@@ -79,6 +88,9 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
   const [mapName, setMapName] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [overlay, setOverlay] = useState<null | 'shop' | 'starter'>(null);
+  /** 메뉴를 열 때 바로 보여 줄 창(퀘스트 게시판) */
+  const [menuStart, setMenuStart] = useState<'quest' | undefined>(undefined);
+  const [phase, setPhase] = useState(() => dayPhase(nowHour()));
   const menuRef = useRef(false);
   menuRef.current = menuOpen || overlay !== null;
   const overlayRef = useRef(overlay);
@@ -122,6 +134,15 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       /** 전투로 넘어가는 중: 더 걷지 않는다 */
       locked: false,
       key: 0,
+      /** 이번 센터 방문에 무료 로프를 받았나 */
+      ropeGiven: false,
+      tint: skyTint(nowHour()) as Tint,
+      tintAt: 0,
+    };
+    /** 지금 시각·선두·연속 잡기로 야생 오디를 굴린다 */
+    const roll = () => {
+      const d = dataRef.current;
+      return rollWild(map.region, Math.random, { lead: d.team[0]?.level ?? 5, phase: dayPhase(nowHour()), combo: d.combo?.count ?? 0 });
     };
 
     const persist = () => {
@@ -151,6 +172,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       rt.triggered.clear();
       rt.wild = [];
       rt.respawn = 0;
+      rt.ropeGiven = false;
       Object.assign(rt.follower, { x: player.x, y: player.y, dir: player.facing, anim: null, heart: 0 });
       fillWild(true);
       setMapName(map.name);
@@ -166,11 +188,12 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
     const addWild = (minDist: number) => {
       const p = spawnWild(map, [...wildTaken(), player], player, Math.random, minDist);
       if (!p) return;
-      const roll = rollWild(map.region, Math.random);
+      const r = roll();
       rt.wildId += 1;
       rt.wild.push({
-        mon: { id: rt.wildId, speciesId: roll.speciesId, level: roll.level, x: p.x, y: p.y, facing: 'down', bold: Math.random() < 0.3 },
+        mon: { id: rt.wildId, speciesId: r.speciesId, level: r.level, x: p.x, y: p.y, facing: 'down', bold: Math.random() < (r.strong ? 0.6 : 0.3) },
         anim: null, wait: 400 + Math.random() * 1600, seen: false, bubble: 0, appear: 0, leaving: 0,
+        shiny: !!r.shiny, strong: !!r.strong, sparkle: 0,
       });
       renderer.emit('poof', p.x * TILE, p.y * TILE);
     };
@@ -181,12 +204,16 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
     const startWildBattle = (w: WildRt) => {
       rt.wild = rt.wild.filter((o) => o !== w);
       rt.held = [];
-      rt.flash = { t: 0, info: { speciesId: w.mon.speciesId, level: w.mon.level, region: map.region } };
+      rt.flash = { t: 0, info: { speciesId: w.mon.speciesId, level: w.mon.level, region: map.region, shiny: w.shiny, strong: w.strong } };
     };
     const updateWild = (dt: number) => {
       for (const w of [...rt.wild]) {
         if (w.appear < 1) w.appear = Math.min(1, w.appear + dt / 300);
         if (w.bubble > 0) w.bubble -= dt;
+        if (w.shiny && w.leaving <= 0) {
+          w.sparkle -= dt;
+          if (w.sparkle <= 0) { w.sparkle = 450 + Math.random() * 300; renderer.emit('sparkle', w.mon.x * TILE, w.mon.y * TILE - 10); }
+        }
         if (w.leaving > 0) {
           w.leaving -= dt;
           if (w.leaving <= 0) rt.wild = rt.wild.filter((o) => o !== w);
@@ -239,11 +266,12 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       else if (it.gift === 'sturdy') next.ropes = { ...d.ropes, sturdy: d.ropes.sturdy + it.n };
       else if (it.gift === 'potion') next.potions = d.potions + it.n;
       else next.coins = d.coins + it.n;
-      setData(next);
+      const q = questsAfter(next, { kind: 'findItem' });
+      setData(q.save);
       renderer.emit('sparkle', x * TILE, y * TILE);
       sfx('ding');
       rt.held = [];
-      openDialog({ pages: [`반짝이는 곳에서 ${GIFT_NAME[it.gift]} ${it.n}개를 주웠다!`] });
+      openDialog({ pages: [`반짝이는 곳에서 ${GIFT_NAME[it.gift]} ${it.n}개를 주웠다!`, ...q.lines] });
       return true;
     };
 
@@ -280,11 +308,24 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
             jingle('heal');
             rt.heal = { t: 0, done: () => {
               const out = exitOf(map);
-              if (out) setData({ ...dataRef.current, respawn: out });
-              openDialog({ speaker: n.name, pages: ['오디들이 모두 건강해졌어요!', '쓰러지면 이 오디 센터 앞에서 다시 시작해요. 또 오세요!'] });
+              let d = dataRef.current;
+              if (out) d = { ...d, respawn: out };
+              const pages = ['오디들이 모두 건강해졌어요!', '쓰러지면 이 오디 센터 앞에서 다시 시작해요. 또 오세요!'];
+              // 로프가 하나도 없으면 갇히지 않게 몇 개 드린다(방문마다 한 번)
+              if (nurseGivesRopes(d.ropes, rt.ropeGiven)) {
+                rt.ropeGiven = true;
+                d = { ...d, ropes: { ...d.ropes, basic: d.ropes.basic + NURSE_ROPES } };
+                pages.splice(1, 0, `어머, 로프가 하나도 없네요! 로프 ${NURSE_ROPES}개를 드릴게요.`);
+                sfx('ding');
+              }
+              setData(d);
+              openDialog({ speaker: n.name, pages });
             } };
           }),
         });
+      }
+      if (n.role === 'quest') {
+        return openDialog({ speaker: n.name, pages: lines, after: finish(() => { rt.held = []; setMenuStart('quest'); setMenuOpen(true); }) });
       }
       if (n.role === 'clerk') return openDialog({ speaker: n.name, pages: lines, after: finish(() => { rt.held = []; setOverlay('shop'); }) });
       if (n.role === 'professor' && !p.flags.includes('starter')) {
@@ -371,7 +412,8 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       persist();
       if (pickItem(player.x, player.y)) return;
       if (p?.encounter && dataRef.current.team.length > 0) {
-        rt.flash = { t: 0, info: rollWild(map.region, Math.random) };
+        const r = roll();
+        rt.flash = { t: 0, info: { speciesId: r.speciesId, level: r.level, region: r.region, shiny: r.shiny, strong: r.strong } };
         return;
       }
       checkTrainers();
@@ -470,26 +512,43 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       });
       const fadeA = rt.fade ? (rt.fade.t < FADE_MS ? rt.fade.t / FADE_MS : Math.max(0, 2 - rt.fade.t / FADE_MS)) : 0;
       const flashA = rt.flash ? (Math.floor(rt.flash.t / 95) % 2 === 0 ? 0.85 : 0.1) : rt.heal ? 0.7 * Math.abs(Math.sin((rt.heal.t / HEAL_MS) * Math.PI * 3)) : 0;
+      const lead = dataRef.current.team[0];
       const mons: MonActor[] = rt.wild.map((w) => ({
         ...lerp(w.mon.x, w.mon.y, w.anim ? { ...w.anim, t: (w.anim.t / WILD_STEP_MS) * STEP_MS } : null),
         speciesId: w.mon.speciesId, dir: w.mon.facing, hop: w.anim ? Math.min(1, w.anim.t / WILD_STEP_MS) : 0,
         bubble: w.bubble > 0 ? 'notice' : null, scale: w.leaving > 0 ? w.leaving / 300 : w.appear,
+        level: w.mon.level, tag: levelTag(w.mon.level, lead?.level ?? 5), shiny: w.shiny, strong: w.strong,
       }));
-      const lead = dataRef.current.team[0];
       const follower: MonActor | null = lead && (fo.x !== player.x || fo.y !== player.y || fo.anim) ? {
         ...lerp(fo.x, fo.y, fo.anim), speciesId: lead.speciesId, dir: fo.dir,
         hop: fo.anim ? Math.min(1, fo.anim.t / STEP_MS) : fo.heart > 0 ? (fo.heart % 350) / 350 : 0,
-        bubble: fo.heart > 0 ? 'heart' : null,
+        bubble: fo.heart > 0 ? 'heart' : null, level: lead.level, tag: 'me', shiny: lead.shiny,
       } : null;
+      // 낮·밤 색은 몇 초마다 다시 잰다
+      rt.tintAt -= dt;
+      if (rt.tintAt <= 0) {
+        rt.tintAt = 5000;
+        const h = nowHour();
+        rt.tint = skyTint(h);
+        setPhase(dayPhase(h));
+      }
       renderer.draw({
         map, time: rt.time, fade: Math.min(1, fadeA), flash: flashA,
         player: { ...pp, look, dir: player.facing, frame: moving },
         npcs: npcs.map(actor), mons, follower,
-        items: hiddenItems(map, dataRef.current.flags),
+        items: hiddenItems(map, dataRef.current.flags), tint: rt.tint,
       });
     };
     raf = requestAnimationFrame(loop);
     fillWild(true);
+    // 퀘스트 게시판이 비었으면 지금 구역에 맞춰 채워 둔다
+    {
+      const d = dataRef.current;
+      if (d.team.length > 0) {
+        const quests = fillQuests(d.quests, questCtx(d), Math.random);
+        if (quests !== d.quests) setData({ ...d, quests });
+      }
+    }
     if (firstMessage.current) openDialog({ ...firstMessage.current, after: finish() });
 
     const press = (d: Dir) => {
@@ -559,6 +618,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
     <div className="gv" ref={wrapRef} onContextMenu={(e) => e.preventDefault()}>
       <canvas ref={canvasRef} className="gv-canvas" onPointerDown={(e) => { e.preventDefault(); api.current?.a(); }} />
       <div key={mapName} className="gv-title">{mapName}</div>
+      <Hud data={data} phase={phase} />
       {dialog && (
         <Dialog
           key={dialog.key} speaker={dialog.speaker} pages={dialog.pages} choices={dialog.choices}
@@ -573,7 +633,13 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
           <span />
         </button>
       )}
-      {menuOpen && <GameMenu data={data} actions={menu} onData={(next) => { dataRef.current = next; onData(next); }} onClose={() => { sfx('menuClose'); setMenuOpen(false); }} />}
+      {menuOpen && (
+        <GameMenu
+          data={data} actions={menu} start={menuStart}
+          onData={(next) => { dataRef.current = next; onData(next); }}
+          onClose={() => { sfx('menuClose'); setMenuOpen(false); setMenuStart(undefined); }}
+        />
+      )}
       {overlay === 'shop' && (
         <ShopPanel data={data} onBuy={(next) => { dataRef.current = next; onData(next); }} onClose={() => { setOverlay(null); api.current?.say(['또 오세요!'], '점원'); }} />
       )}
@@ -593,6 +659,41 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
           }} />
         </div>
       )}
+    </div>
+  );
+}
+
+/** 왼쪽 위 작은 표시: 선두 오디 레벨·경험치, 코인(늘면 +N 튀어 오름), 낮/밤 */
+/** 마지막으로 HUD에 보인 코인(전투 뒤 월드를 새로 그려도 +N을 보여 주려고 모듈에 둔다) */
+let shownCoins: number | null = null;
+function Hud({ data, phase }: { data: SaveData; phase: ReturnType<typeof dayPhase> }) {
+  const lead = data.team[0];
+  const [gain, setGain] = useState<{ n: number; key: number } | null>(null);
+  useEffect(() => {
+    const diff = shownCoins === null ? 0 : data.coins - shownCoins;
+    shownCoins = data.coins;
+    if (diff <= 0) return;
+    setGain({ n: diff, key: Date.now() });
+    sfx('coin');
+    const id = window.setTimeout(() => setGain(null), 1400);
+    return () => window.clearTimeout(id);
+  }, [data.coins]);
+  const exp = lead ? (lead.level >= MAX_LEVEL ? 1 : Math.min(1, lead.exp / expToNext(lead.level))) : 0;
+  const sp = lead ? speciesById(lead.speciesId) : null;
+  return (
+    <div className="gv-hud" aria-label="상태">
+      {lead && sp && (
+        <div className={`gv-chip gv-lead${lead.shiny ? ' shiny' : ''}`}>
+          <OddieArt speciesId={lead.speciesId} name={sp.name} types={sp.types} size={26} />
+          <span className="gv-lv">Lv.{lead.level}</span>
+          <span className="gv-exp" aria-label={`경험치 ${Math.round(exp * 100)}%`}><i style={{ width: `${exp * 100}%` }} /></span>
+        </div>
+      )}
+      <div key={gain?.key ?? 0} className={`gv-chip gv-coins${gain ? ' up' : ''}`} aria-label={`코인 ${data.coins}`}>
+        <span className="gv-coin" aria-hidden />{data.coins.toLocaleString('ko-KR')}
+        {gain && <em className="gv-gain">+{gain.n.toLocaleString('ko-KR')}</em>}
+      </div>
+      <div className="gv-chip gv-time" title={PHASE_NAME[phase]} aria-label={PHASE_NAME[phase]}>{PHASE_ICON[phase]}</div>
     </div>
   );
 }
