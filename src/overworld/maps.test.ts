@@ -5,7 +5,7 @@ import { MAPS, OUTDOORS } from './maps/index.ts';
 import type { MapData } from './maps/types.ts';
 import { BADGE_ORDER, TRAINERS, WILD_LEVELS } from './encounters.ts';
 import { isWalkable } from './tiles.ts';
-import { canStep, exitOf, gateOpen, mapHeight, mapWidth, npcLines, placeNpcs, progressOf, stepPlayer, tileAt, type Progress } from './world.ts';
+import { DELTA, canStep, exitOf, npcInSight, gateOpen, mapHeight, mapWidth, npcLines, placeNpcs, progressOf, stepPlayer, tileAt, type Progress } from './world.ts';
 
 const all = Object.values(MAPS);
 const walk = (m: MapData, x: number, y: number) => { const t = tileAt(m, x, y); return t !== undefined && isWalkable(t); };
@@ -107,6 +107,57 @@ describe('세계가 이어져 있다', () => {
   });
 });
 
+describe('도착 칸과 시야', () => {
+  const full = reachable(ALL_BADGES);
+  it('워프 도착 칸은 어떤 NPC 자리(문지기가 막을 때·비켜설 때 모두)와도 겹치지 않는다', () => {
+    for (const m of all) {
+      for (const w of m.warps) {
+        const d = MAPS[w.to.map];
+        for (const n of d.npcs) {
+          expect(n.x === w.to.x && n.y === w.to.y, `${m.id} -> ${d.id} lands on ${n.id}`).toBe(false);
+          if (n.gate) expect(n.gate.aside.x === w.to.x && n.gate.aside.y === w.to.y, `${m.id} -> ${d.id} lands on ${n.id} aside`).toBe(false);
+        }
+      }
+    }
+  });
+  it('도착하면 바라보는 칸이 걸을 수 있는 칸이다(나오자마자 바위를 보지 않는다)', () => {
+    for (const m of all) {
+      for (const w of m.warps) {
+        const d = MAPS[w.to.map];
+        const { dx, dy } = DELTA[w.to.facing];
+        const nx = w.to.x + dx, ny = w.to.y + dy;
+        // 지도 가장자리 출구(밖을 보고 도착)는 빼고, 그 밖은 앞 칸이 열려 있어야 한다
+        if (nx < 0 || ny < 0 || nx >= mapWidth(d) || ny >= mapHeight(d)) continue;
+        expect(walk(d, nx, ny), `${m.id} -> ${d.id} ${w.to.x},${w.to.y} facing ${w.to.facing}`).toBe(true);
+      }
+    }
+  });
+  it('바깥 지도의 건물 워프는 문 칸이다', () => {
+    for (const m of OUTDOORS) for (const w of m.warps) if (!OUTDOORS.some((o) => o.id === w.to.map)) expect(m.rows[w.y][w.x], `${m.id} ${w.to.map}`).toBe('D');
+  });
+  it('모든 NPC 옆에 설 수 있다', () => {
+    for (const m of all) {
+      for (const n of m.npcs.filter((o) => !o.gate)) {
+        const near = [[0, 1], [0, -1], [1, 0], [-1, 0], [0, 2]].some(([dx, dy]) => full.has(`${m.id}:${n.x + dx},${n.y + dy}`));
+        expect(near, n.id).toBe(true);
+      }
+    }
+  });
+  it('트레이너 시야 안에 플레이어가 걸어 들어갈 수 있는 칸이 있다(길을 지킨다)', () => {
+    for (const m of all) {
+      const npcs = placeNpcs(m, ALL_BADGES);
+      const blocked = (x: number, y: number) => !canStep(m, npcs, x, y);
+      for (const n of m.npcs.filter((o) => o.trainer && o.trainer.sight > 0)) {
+        const seen = [...full].filter((k) => k.startsWith(`${m.id}:`)).some((k) => {
+          const [x, y] = k.split(':')[1].split(',').map(Number);
+          return npcInSight(n, { x, y }, n.trainer!.sight, blocked);
+        });
+        expect(seen, n.id).toBe(true);
+      }
+    }
+  });
+});
+
 describe('문지기', () => {
   const gate = MAPS.route1.npcs.find((n) => n.id === 'gate-desert')!;
   it('배지가 없으면 막고, 있으면 비켜선다', () => {
@@ -180,6 +231,21 @@ describe('트레이너 팀', () => {
       expect(t.team.length).toBeLessThanOrEqual(5);
       for (const m of t.team) expect(speciesById(m.speciesId).id).toBe(m.speciesId);
       expect(t.reward).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('숨은 물건', () => {
+  const full = reachable(ALL_BADGES);
+  it('걸을 수 있고 갈 수 있는 칸, NPC·워프와 겹치지 않고 id가 겹치지 않는다', () => {
+    const ids = all.flatMap((m) => (m.items ?? []).map((i) => i.id));
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.length).toBeGreaterThanOrEqual(8);
+    for (const m of all) {
+      for (const i of m.items ?? []) {
+        expect(full.has(`${m.id}:${i.x},${i.y}`), i.id).toBe(true);
+        expect(m.npcs.some((n) => n.x === i.x && n.y === i.y) || m.warps.some((w) => w.x === i.x && w.y === i.y), i.id).toBe(false);
+      }
     }
   });
 });

@@ -8,12 +8,16 @@ export type Tile = number;
 export type Kind =
   | 'grass' | 'tall' | 'path' | 'water' | 'tree' | 'flower' | 'fence' | 'rock' | 'sand' | 'snow' | 'ice'
   | 'lava' | 'volcano' | 'cactus' | 'wall' | 'window' | 'door' | 'roof' | 'sign' | 'floor' | 'carpet'
-  | 'counter' | 'shelf' | 'machine' | 'gym' | 'iwall' | 'iwall2' | 'pillar' | 'marble';
+  | 'counter' | 'shelf' | 'machine' | 'gym' | 'iwall' | 'iwall2' | 'pillar' | 'marble'
+  | 'bridge' | 'bench' | 'torch' | 'snowman' | 'iceblock' | 'dune' | 'hedge' | 'stone' | 'stall' | 'pot'
+  | 'trophy' | 'statue' | 'light' | 'itemshelf' | 'plant' | 'rug';
 
 const KINDS: Kind[] = [
   'grass', 'tall', 'path', 'water', 'tree', 'flower', 'fence', 'rock', 'sand', 'snow', 'ice',
   'lava', 'volcano', 'cactus', 'wall', 'window', 'door', 'roof', 'sign', 'floor', 'carpet',
   'counter', 'shelf', 'machine', 'gym', 'iwall', 'iwall2', 'pillar', 'marble',
+  'bridge', 'bench', 'torch', 'snowman', 'iceblock', 'dune', 'hedge', 'stone', 'stall', 'pot',
+  'trophy', 'statue', 'light', 'itemshelf', 'plant', 'rug',
 ];
 const KIND_ID = Object.fromEntries(KINDS.map((k, i) => [k, i])) as Record<Kind, number>;
 
@@ -23,6 +27,8 @@ export const CHAR_KIND: Record<string, Kind> = {
   s: 'sand', n: 'snow', i: 'ice', l: 'lava', v: 'volcano', C: 'cactus', W: 'wall', w: 'window', D: 'door',
   Y: 'sign', _: 'floor', c: 'carpet', K: 'counter', h: 'shelf', m: 'machine', x: 'gym', I: 'iwall', J: 'iwall2',
   X: 'pillar', g: 'marble',
+  H: 'bridge', b: 'bench', t: 'torch', S: 'snowman', E: 'iceblock', d: 'dune', F: 'hedge', q: 'stone', A: 'stall', u: 'pot',
+  y: 'trophy', V: 'statue', L: 'light', k: 'itemshelf', p: 'plant', r: 'rug',
 };
 export const ROOF_CHARS = 'RBGNOPUZQ'; // 빨강 파랑 회색 초록 주황 보라 금색 얼음 진홍
 
@@ -65,11 +71,35 @@ export function parseRows(rows: string[]): Tile[][] {
       return mk('roof', info) | (roofColor << 16);
     }
     if (kindAt(x, y - 1) === 'roof' && bld(x, y)) info |= UNDER;
-    return mk(CHAR_KIND[c] ?? 'grass', info);
+    const kind = CHAR_KIND[c] ?? 'grass';
+    // 물·용암·얼음·카펫은 다른 바닥과 닿는 쪽에 테두리를 그린다
+    if (EDGED.has(kind)) {
+      const same = (k: Kind | null) => k !== null && family(k) === family(kind);
+      if (!same(kindAt(x - 1, y))) info |= L;
+      if (!same(kindAt(x + 1, y))) info |= R;
+      if (!same(kindAt(x, y + 1))) info |= B;
+      if (!same(kindAt(x, y - 1))) info |= TOP;
+    }
+    // 물건 타일은 옆 바닥을 밑에 깔고 그린다(실내 화분은 마루, 전당 횃불은 대리석)
+    let under = 0;
+    if (OBJECTS.has(kind)) {
+      const k = [kindAt(x - 1, y), kindAt(x + 1, y), kindAt(x, y + 1), kindAt(x, y - 1)].find((n) => n !== null && FLOORS.has(n));
+      under = k ? KIND_ID[k] + 1 : 0;
+    }
+    return mk(kind, info) | (under << 24);
   }));
 }
 
-const WALKABLE = new Set<Kind>(['grass', 'tall', 'path', 'flower', 'sand', 'snow', 'ice', 'volcano', 'door', 'floor', 'carpet', 'gym', 'marble']);
+const EDGED = new Set<Kind>(['water', 'lava', 'ice', 'carpet', 'rug']);
+/** 다리는 물, 징검돌은 용암과 한 덩어리로 본다(테두리를 안 그린다) */
+const family = (k: Kind): Kind => (k === 'bridge' ? 'water' : k === 'stone' ? 'lava' : k);
+const OBJECTS = new Set<Kind>(['bench', 'torch', 'snowman', 'iceblock', 'dune', 'hedge', 'stall', 'pot', 'trophy', 'statue', 'plant', 'sign']);
+const FLOORS = new Set<Kind>(['grass', 'path', 'sand', 'snow', 'ice', 'volcano', 'floor', 'gym', 'marble', 'light']);
+
+const WALKABLE = new Set<Kind>([
+  'grass', 'tall', 'path', 'flower', 'sand', 'snow', 'ice', 'volcano', 'door', 'floor', 'carpet', 'gym', 'marble',
+  'bridge', 'stone', 'light', 'rug',
+]);
 export const isWalkable = (t: Tile) => WALKABLE.has(kindOf(t));
 export const isGrass = (t: Tile) => kindOf(t) === 'tall';
 export const isDoor = (t: Tile) => kindOf(t) === 'door';
@@ -143,7 +173,7 @@ function ground(c: Ctx, x: number, y: number, seed: number, g = GROUND.meadow) {
 }
 
 /** 구역별 나무: 초원 둥근 나무, 사막 야자, 설원 눈 덮인 전나무, 화산 그을린 고목 */
-function drawTree(c: Ctx, x: number, y: number, seed: number, region: RegionId) {
+function drawTree(c: Ctx, x: number, y: number, seed: number, region: RegionId, frame = 0) {
   ground(c, x, y, seed, GROUND[region]);
   if (region === 'desert') {
     disc(c, 'rgba(90,60,20,0.3)', x + 16, y + 29, 9);
@@ -196,11 +226,13 @@ function drawTree(c: Ctx, x: number, y: number, seed: number, region: RegionId) 
   rect(c, '#5e3818', x + 12, y + 18, 8, 12);
   rect(c, '#7a4a21', x + 13, y + 18, 5, 12);
   rect(c, '#9a6330', x + 13, y + 18, 2, 11);
+  // 바람에 잎이 살랑: frame마다 위쪽 잎 덩어리가 1px 흔들린다
+  const sway = frame ? (seed % 2 ? 1 : -1) : 0;
   disc(c, '#1f5c26', x + 16, y + 13, 15);
-  disc(c, '#2f7d32', x + 16, y + 12, 13);
-  disc(c, '#3f9a3a', x + 14, y + 10, 10);
-  disc(c, '#62c04b', x + 11, y + 7, 5);
-  rect(c, '#8fe07a', x + 9, y + 5, 3, 2);
+  disc(c, '#2f7d32', x + 16 + sway, y + 12, 13);
+  disc(c, '#3f9a3a', x + 14 + sway, y + 10, 10);
+  disc(c, '#62c04b', x + 11 + sway, y + 7, 5);
+  rect(c, '#8fe07a', x + 9 + sway, y + 5, 3, 2);
   rect(c, '#2a6a2c', x + 19, y + 15, 6, 2);
 }
 
@@ -316,6 +348,33 @@ function drawRoof(c: Ctx, t: Tile, x: number, y: number) {
   if (info & R) rect(c, OUTLINE, x + TILE - 1, y, 1, TILE);
 }
 
+const RUG: Record<RegionId, [string, string, string]> = {
+  meadow: ['#4f9a5a', '#2f6a3a', '#a8e0a0'],
+  desert: ['#d0703a', '#8a3a1a', '#f4c070'],
+  snow: ['#4a7fc0', '#2a4f8a', '#cfe6ff'],
+  volcano: ['#8a2a3a', '#4e121c', '#f0a050'],
+};
+
+/** 물건 밑바닥: 옆 바닥 타일(parseRows가 정함), 없으면 구역 땅 */
+function base(c: Ctx, t: Tile, x: number, y: number, frame: number, region: RegionId, seed: number) {
+  const under = (t >> 24) & 0x7f;
+  if (under) drawTile(c, mk(KINDS[under - 1]), x, y, frame, region, seed);
+  else ground(c, x, y, seed, GROUND[region]);
+}
+
+/** 물·얼음·용암 가장자리: 바깥쪽은 짙은 선, 위쪽은 밝은 물결, 모서리는 땅으로 둥글게 */
+function shore(c: Ctx, t: Tile, x: number, y: number, g: (typeof GROUND)['meadow'], line: string, lip: string) {
+  const info = extra(t);
+  if (info & TOP) { rect(c, line, x, y, TILE, 2); rect(c, lip, x, y + 2, TILE, 2); }
+  if (info & B) { rect(c, lip, x, y + 27, TILE, 1); rect(c, line, x, y + 28, TILE, 2); rect(c, g.dark, x, y + 30, TILE, 2); }
+  if (info & L) { rect(c, line, x, y, 2, TILE); rect(c, lip, x + 2, y + 2, 1, TILE - 4); }
+  if (info & R) { rect(c, line, x + 30, y, 2, TILE); }
+  if ((info & TOP) && (info & L)) { rect(c, g.base, x, y, 4, 2); rect(c, g.base, x, y, 2, 4); rect(c, line, x + 2, y + 2, 2, 2); }
+  if ((info & TOP) && (info & R)) { rect(c, g.base, x + 28, y, 4, 2); rect(c, g.base, x + 30, y, 2, 4); rect(c, line, x + 28, y + 2, 2, 2); }
+  if ((info & B) && (info & L)) { rect(c, g.base, x, y + 30, 4, 2); rect(c, g.base, x, y + 28, 2, 4); rect(c, line, x + 2, y + 28, 2, 2); }
+  if ((info & B) && (info & R)) { rect(c, g.base, x + 28, y + 30, 4, 2); rect(c, g.base, x + 30, y + 28, 2, 4); rect(c, line, x + 28, y + 28, 2, 2); }
+}
+
 /** 한 타일을 (x, y) 픽셀 위치에 그린다. seed로 풀 무늬를 바꾸고 frame(0/1)은 물·용암 물결 */
 export function drawTile(c: Ctx, t: Tile, x: number, y: number, frame: number, region: RegionId, seed = 0) {
   const kind = kindOf(t);
@@ -352,18 +411,39 @@ export function drawTile(c: Ctx, t: Tile, x: number, y: number, frame: number, r
       rect(c, '#3b82d6', x, y, TILE, TILE);
       rect(c, '#2f6dbd', x, y + 20, TILE, 12);
       for (let r = 0; r < 3; r += 1) {
-        const ox = (frame ? 10 : 0) + r * 7;
+        const ox = (frame ? 10 : 0) + r * 7 + seed * 3;
         rect(c, '#86c0f4', x + (ox % 22) + 2, y + 5 + r * 9, 8, 1);
         rect(c, '#5aa0e8', x + ((ox + 12) % 22) + 2, y + 8 + r * 9, 5, 1);
       }
+      if (extra(t) === 0 && seed === 2) {
+        // 연잎
+        disc(c, '#1f6a2a', x + 12, y + 14, 6); disc(c, '#3e9a3e', x + 12, y + 13, 5);
+        rect(c, '#2f6dbd', x + 12, y + 9, 2, 5); rect(c, '#f283c1', x + 10, y + 11, 2, 2);
+        disc(c, '#3e9a3e', x + 24, y + 24, 3);
+      }
+      if (frame) { rect(c, '#ffffff', x + 6 + seed * 5, y + 12, 2, 1); rect(c, '#ffffff', x + 22 - seed * 3, y + 22, 1, 1); }
+      shore(c, t, x, y, g, '#1d4f8f', frame ? '#b8e0ff' : '#9fd2ff');
       break;
     }
-    case 'tree': drawTree(c, x, y, seed, region); break;
+    case 'bridge': {
+      rect(c, '#2f6dbd', x, y, TILE, TILE);
+      rect(c, '#1d4f8f', x, y + 28, TILE, 4);
+      for (let k = 0; k < 4; k += 1) {
+        rect(c, OUTLINE, x + k * 8, y + 1, 8, 27);
+        rect(c, '#b07a40', x + k * 8 + 1, y + 2, 6, 25);
+        rect(c, '#d9a869', x + k * 8 + 1, y + 2, 2, 25);
+        rect(c, '#8a5a2b', x + k * 8 + 5, y + 4 + ((k + seed) % 3) * 6, 1, 3);
+      }
+      rect(c, '#5c3d1e', x, y + 1, TILE, 3); rect(c, '#5c3d1e', x, y + 25, TILE, 3);
+      rect(c, '#c8955a', x, y + 2, TILE, 1);
+      break;
+    }
+    case 'tree': drawTree(c, x, y, seed, region, frame); break;
     case 'flower': {
       ground(c, x, y, seed, g);
       const cols = ['#e8484f', '#f7d340', '#ffffff', '#f283c1'];
       for (let i = 0; i < 4; i += 1) {
-        const fx = x + 4 + (i % 2) * 14 + Math.floor(rnd(seed, i) * 5);
+        const fx = x + 4 + (i % 2) * 14 + Math.floor(rnd(seed, i) * 5) + (frame && (i + seed) % 2 ? 1 : 0);
         const fy = y + 5 + Math.floor(i / 2) * 14 + Math.floor(rnd(seed, i + 5) * 4);
         const col = cols[(seed + i) % 4];
         rect(c, '#3f8a2f', fx + 1, fy + 3, 1, 5);
@@ -404,7 +484,8 @@ export function drawTile(c: Ctx, t: Tile, x: number, y: number, frame: number, r
         rect(c, '#ffffff', x + 4 + i * 9, y + 20 - i * 6, 6, 1);
         rect(c, '#ffffff', x + 6 + i * 9, y + 19 - i * 6, 1, 1);
       }
-      rect(c, '#e6f7fc', x, y, TILE, 1);
+      if (seed % 2) rect(c, '#8cc6e0', x + 6 + seed * 3, y + 9, 7, 1);
+      shore(c, t, x, y, GROUND.snow, '#5f9fc4', '#e6f7fc');
       break;
     }
     case 'lava': {
@@ -418,7 +499,22 @@ export function drawTile(c: Ctx, t: Tile, x: number, y: number, frame: number, r
       }
       disc(c, '#ffd25a', x + 8 + ((frame + seed) % 2) * 14, y + 10 + (seed % 2) * 10, 2);
       rect(c, '#fff2a8', x + 7 + ((frame + seed) % 2) * 14, y + 9 + (seed % 2) * 10, 2, 1);
-      rect(c, '#7a1e0c', x, y, TILE, 1);
+      // 부글부글 거품
+      const bx = x + 8 + ((seed * 9) % 16);
+      const by = y + 12 + ((seed * 5) % 10);
+      if (frame) { disc(c, '#ffb02e', bx, by, 3); rect(c, '#fff2a8', bx - 1, by - 2, 2, 1); } else { rect(c, '#7a1e0c', bx - 2, by, 5, 1); rect(c, '#ffd25a', bx - 1, by - 1, 3, 1); }
+      shore(c, t, x, y, GROUND.volcano, '#2a120c', '#ffb02e');
+      break;
+    }
+    case 'stone': {
+      // 징검돌: 용암(화산) 또는 물 위의 둥근 돌
+      drawTile(c, mk(region === 'volcano' ? 'lava' : 'water'), x, y, frame, region, seed);
+      disc(c, 'rgba(0,0,0,0.35)', x + 16, y + 19, 12);
+      disc(c, '#2a2220', x + 16, y + 16, 12);
+      disc(c, '#6a5e5a', x + 16, y + 15, 11);
+      disc(c, '#8a7e78', x + 14, y + 12, 6);
+      rect(c, '#b0a49c', x + 10, y + 9, 4, 2);
+      rect(c, '#4e4442', x + 19, y + 19, 5, 2);
       break;
     }
     case 'volcano': {
@@ -463,7 +559,7 @@ export function drawTile(c: Ctx, t: Tile, x: number, y: number, frame: number, r
     }
     case 'roof': drawRoof(c, t, x, y); break;
     case 'sign': {
-      ground(c, x, y, seed, g);
+      base(c, t, x, y, frame, region, seed);
       rect(c, 'rgba(0,0,0,0.2)', x + 8, y + 28, 16, 3);
       rect(c, '#6b4423', x + 14, y + 16, 4, 14);
       rect(c, '#6b4423', x + 4, y + 5, 24, 15);
@@ -482,10 +578,26 @@ export function drawTile(c: Ctx, t: Tile, x: number, y: number, frame: number, r
       break;
     }
     case 'carpet': {
+      const info = extra(t);
       rect(c, '#c9363e', x, y, TILE, TILE);
-      rect(c, '#f0c050', x, y, TILE, 3);
-      rect(c, '#9a2430', x, y + 3, TILE, 2);
-      for (let k = 0; k < 4; k += 1) rect(c, '#e0505a', x + 4 + k * 8, y + 14, 3, 3);
+      rect(c, '#e0505a', x + 13, y + 10, 6, 12); rect(c, '#e0505a', x + 10, y + 13, 12, 6);
+      rect(c, '#f0c050', x + 15, y + 15, 2, 2);
+      if (info & L) { rect(c, '#9a2430', x, y, 5, TILE); rect(c, '#f0c050', x + 1, y, 2, TILE); }
+      if (info & R) { rect(c, '#9a2430', x + 27, y, 5, TILE); rect(c, '#f0c050', x + 29, y, 2, TILE); }
+      if (info & TOP) { rect(c, '#9a2430', x, y, TILE, 5); rect(c, '#f0c050', x, y + 1, TILE, 2); }
+      if (info & B) { rect(c, '#9a2430', x, y + 27, TILE, 5); rect(c, '#f0c050', x, y + 29, TILE, 2); }
+      break;
+    }
+    case 'rug': {
+      const info = extra(t);
+      const [m, d, l] = RUG[region];
+      rect(c, m, x, y, TILE, TILE);
+      for (let k = 0; k < 4; k += 1) rect(c, d, x + ((k * 8 + (seed % 2) * 4) % 32), y + 4 + k * 8, 4, 2);
+      rect(c, l, x + 14, y + 14, 4, 4);
+      if (info & L) { rect(c, d, x, y, 4, TILE); rect(c, l, x + 1, y, 1, TILE); }
+      if (info & R) { rect(c, d, x + 28, y, 4, TILE); rect(c, l, x + 30, y, 1, TILE); }
+      if (info & TOP) { rect(c, d, x, y, TILE, 4); rect(c, l, x, y + 1, TILE, 1); }
+      if (info & B) { rect(c, d, x, y + 28, TILE, 4); rect(c, l, x, y + 30, TILE, 1); }
       break;
     }
     case 'counter': {
@@ -559,6 +671,179 @@ export function drawTile(c: Ctx, t: Tile, x: number, y: number, frame: number, r
       rect(c, '#e2d3ae', x, y, TILE, 2);
       rect(c, '#d9c9a0', x + 15, y, 2, TILE);
       rect(c, 'rgba(60,40,30,0.12)', x, y + 26, TILE, 6);
+      break;
+    }
+    case 'light': {
+      // 숲 사이로 내려오는 햇살: 밝은 풀 + 비스듬한 빛줄기 + 반짝이
+      ground(c, x, y, seed, g);
+      rect(c, 'rgba(255,248,190,0.22)', x, y, TILE, TILE);
+      for (let k = 0; k < 4; k += 1) rect(c, 'rgba(255,252,220,0.28)', x + 4 + k * 5 - (k > 1 ? 2 : 0), y + k * 8, 10, 8);
+      const sp = frame ? [[8, 6], [22, 20]] : [[20, 8], [10, 22]];
+      for (const [sx, sy] of sp) { rect(c, '#fffbe0', x + sx, y + sy - 1, 1, 3); rect(c, '#fffbe0', x + sx - 1, y + sy, 3, 1); }
+      rect(c, '#f7d340', x + 5 + seed * 5, y + 26, 2, 2); rect(c, '#ffffff', x + 24 - seed * 3, y + 4, 2, 2);
+      break;
+    }
+    case 'bench': {
+      base(c, t, x, y, frame, region, seed);
+      rect(c, 'rgba(0,0,0,0.2)', x + 3, y + 27, 27, 3);
+      rect(c, OUTLINE, x + 2, y + 6, 28, 9);
+      rect(c, '#a8733a', x + 3, y + 7, 26, 7); rect(c, '#d9a869', x + 3, y + 7, 26, 2);
+      rect(c, OUTLINE, x + 2, y + 16, 28, 9);
+      rect(c, '#c8955a', x + 3, y + 17, 26, 7); rect(c, '#e8c088', x + 3, y + 17, 26, 2);
+      rect(c, '#8a5a2b', x + 3, y + 21, 26, 1);
+      rect(c, OUTLINE, x + 4, y + 25, 4, 5); rect(c, OUTLINE, x + 24, y + 25, 4, 5);
+      rect(c, '#5c3d1e', x + 5, y + 25, 2, 4); rect(c, '#5c3d1e', x + 25, y + 25, 2, 4);
+      break;
+    }
+    case 'torch': {
+      base(c, t, x, y, frame, region, seed);
+      disc(c, 'rgba(255,170,60,0.16)', x + 16, y + 10, 14);
+      disc(c, 'rgba(0,0,0,0.3)', x + 16, y + 29, 7);
+      rect(c, OUTLINE, x + 11, y + 15, 10, 16);
+      rect(c, '#5a4a48', x + 12, y + 16, 8, 14); rect(c, '#8a7670', x + 12, y + 16, 3, 14);
+      rect(c, OUTLINE, x + 8, y + 12, 16, 5);
+      rect(c, '#8a7670', x + 9, y + 13, 14, 3); rect(c, '#b0a49c', x + 9, y + 13, 14, 1);
+      const f = frame ? 1 : 0;
+      disc(c, '#e8481c', x + 16, y + 8 - f, 6);
+      disc(c, '#ff8a2a', x + 16 + f, y + 9 - f, 4);
+      disc(c, '#ffd25a', x + 16, y + 10, 2);
+      rect(c, '#e8481c', x + 15 - f, y + 1 - f, 2, 3); rect(c, '#fff2a8', x + 15, y + 9, 2, 2);
+      break;
+    }
+    case 'snowman': {
+      base(c, t, x, y, frame, region, seed);
+      disc(c, 'rgba(60,90,120,0.25)', x + 16, y + 29, 10);
+      disc(c, '#5f7f9a', x + 16, y + 21, 10); disc(c, '#ffffff', x + 16, y + 20, 9); disc(c, '#dceaf4', x + 19, y + 23, 5);
+      disc(c, '#5f7f9a', x + 16, y + 9, 7); disc(c, '#ffffff', x + 16, y + 8, 6);
+      rect(c, '#e8484f', x + 10, y + 13, 12, 3); rect(c, '#e8484f', x + 18, y + 15, 3, 5); rect(c, '#9a2430', x + 10, y + 15, 12, 1);
+      rect(c, OUTLINE, x + 13, y + 6, 2, 2); rect(c, OUTLINE, x + 18, y + 6, 2, 2);
+      rect(c, '#f08a24', x + 15, y + 9, 5, 2);
+      rect(c, OUTLINE, x + 15, y + 19, 2, 2); rect(c, OUTLINE, x + 15, y + 24, 2, 2);
+      rect(c, '#5a3a20', x + 3, y + 17, 5, 1); rect(c, '#5a3a20', x + 2, y + 15, 1, 2); rect(c, '#5a3a20', x + 24, y + 17, 5, 1); rect(c, '#5a3a20', x + 29, y + 15, 1, 2);
+      rect(c, '#2b2024', x + 11, y + 1, 10, 2); rect(c, '#2b2024', x + 13, y - 0, 6, 1);
+      break;
+    }
+    case 'iceblock': {
+      base(c, t, x, y, frame, region, seed);
+      rect(c, 'rgba(40,80,120,0.25)', x + 3, y + 27, 28, 4);
+      rect(c, '#3f7aa0', x + 2, y + 3, 28, 27);
+      rect(c, '#e6f7fc', x + 3, y + 4, 26, 9);
+      rect(c, '#9fd6ee', x + 3, y + 13, 26, 16);
+      rect(c, '#7fbcda', x + 3, y + 24, 26, 5);
+      rect(c, '#ffffff', x + 5, y + 6, 8, 2); rect(c, '#ffffff', x + 5, y + 15, 2, 7);
+      rect(c, '#c8ecfa', x + 18, y + 16, 1, 6); rect(c, '#c8ecfa', x + 19, y + 21, 5, 1);
+      rect(c, '#3f7aa0', x + 3, y + 13, 26, 1);
+      break;
+    }
+    case 'dune': {
+      base(c, t, x, y, frame, region, seed);
+      disc(c, 'rgba(120,80,30,0.25)', x + 16, y + 24, 14);
+      disc(c, '#b8904e', x + 16, y + 19, 14);
+      disc(c, '#e3c07c', x + 15, y + 17, 13);
+      disc(c, '#f2dca4', x + 11, y + 13, 7);
+      for (let k = 0; k < 3; k += 1) rect(c, '#c8a060', x + 8 + k * 4, y + 20 + k * 2, 10, 1);
+      rect(c, '#fff0c8', x + 8, y + 10, 5, 1);
+      break;
+    }
+    case 'hedge': {
+      base(c, t, x, y, frame, region, seed);
+      rect(c, 'rgba(0,0,0,0.25)', x + 1, y + 28, 31, 4);
+      rect(c, '#1a4420', x, y + 2, TILE, 27);
+      rect(c, '#2f7d32', x + 1, y + 3, 30, 25);
+      for (let k = 0; k < 4; k += 1) disc(c, '#3f9a3a', x + 5 + k * 7, y + 8 + (k % 2) * 2, 4);
+      for (let k = 0; k < 3; k += 1) disc(c, '#3f9a3a', x + 8 + k * 8, y + 18 + (k % 2) * 2, 4);
+      for (let k = 0; k < 4; k += 1) rect(c, '#7fd06a', x + 3 + k * 7, y + 5 + (k % 2) * 2, 3, 2);
+      rect(c, '#24602a', x + 1, y + 24, 30, 4);
+      if (seed === 1) { rect(c, '#f283c1', x + 20, y + 11, 3, 3); rect(c, '#ffffff', x + 9, y + 19, 2, 2); }
+      break;
+    }
+    case 'stall': {
+      // 시장 노점: 줄무늬 차양 + 물건 놓인 판대
+      base(c, t, x, y, frame, region, seed);
+      rect(c, 'rgba(0,0,0,0.2)', x + 2, y + 28, 29, 3);
+      const stripe = ['#d94f3d', '#3f78d8', '#3a9a4a', '#e0892f'][seed];
+      rect(c, OUTLINE, x + 4, y + 14, 3, 16); rect(c, OUTLINE, x + 25, y + 14, 3, 16);
+      rect(c, OUTLINE, x + 2, y + 18, 28, 11);
+      rect(c, '#a8733a', x + 3, y + 19, 26, 9); rect(c, '#d9a869', x + 3, y + 19, 26, 2);
+      const goods = ['#e8484f', '#f7d340', '#3a9a4a', '#f08a24', '#8a5ac8'];
+      for (let k = 0; k < 4; k += 1) { disc(c, goods[(k + seed) % 5], x + 7 + k * 6, y + 18, 2); }
+      rect(c, OUTLINE, x + 1, y + 2, 30, 14);
+      for (let k = 0; k < 6; k += 1) rect(c, k % 2 ? '#fff6e0' : stripe, x + 2 + k * 5, y + 3, 5, 10);
+      for (let k = 0; k < 6; k += 1) rect(c, k % 2 ? '#fff6e0' : stripe, x + 3 + k * 5, y + 13, 3, 2);
+      rect(c, '#ffffff66', x + 2, y + 3, 28, 2);
+      break;
+    }
+    case 'pot': {
+      base(c, t, x, y, frame, region, seed);
+      disc(c, 'rgba(0,0,0,0.25)', x + 16, y + 28, 9);
+      disc(c, OUTLINE, x + 16, y + 19, 10);
+      disc(c, '#b8643a', x + 16, y + 19, 9);
+      disc(c, '#d88a54', x + 13, y + 16, 4);
+      rect(c, OUTLINE, x + 9, y + 6, 14, 6); rect(c, '#8a4424', x + 10, y + 7, 12, 4); rect(c, '#5a2a14', x + 11, y + 8, 10, 2);
+      rect(c, '#e8b080', x + 10, y + 7, 12, 1);
+      rect(c, '#8a4424', x + 8, y + 21, 16, 2); rect(c, '#f4d49a', x + 10 + seed * 2, y + 21, 3, 2);
+      break;
+    }
+    case 'trophy': {
+      base(c, t, x, y, frame, region, seed);
+      disc(c, 'rgba(0,0,0,0.25)', x + 16, y + 29, 10);
+      rect(c, OUTLINE, x + 6, y + 22, 20, 9); rect(c, '#5a4a6a', x + 7, y + 23, 18, 7); rect(c, '#8a7aa0', x + 7, y + 23, 18, 2);
+      rect(c, OUTLINE, x + 12, y + 17, 8, 6); rect(c, '#c09020', x + 13, y + 17, 6, 5);
+      rect(c, OUTLINE, x + 7, y + 2, 18, 16);
+      rect(c, '#e0b030', x + 8, y + 3, 16, 13); rect(c, '#f8dc70', x + 10, y + 4, 4, 10); rect(c, '#a07818', x + 20, y + 4, 3, 12);
+      rect(c, OUTLINE, x + 3, y + 5, 5, 8); rect(c, '#e0b030', x + 4, y + 6, 3, 6); rect(c, '#c09020', x + 5, y + 7, 2, 4);
+      rect(c, OUTLINE, x + 24, y + 5, 5, 8); rect(c, '#e0b030', x + 25, y + 6, 3, 6); rect(c, '#c09020', x + 25, y + 7, 2, 4);
+      rect(c, '#fff2a8', x + 11, y + 5 + frame, 2, 2);
+      break;
+    }
+    case 'statue': {
+      base(c, t, x, y, frame, region, seed);
+      disc(c, 'rgba(0,0,0,0.25)', x + 16, y + 29, 11);
+      rect(c, OUTLINE, x + 5, y + 21, 22, 10); rect(c, '#8a8f98', x + 6, y + 22, 20, 8); rect(c, '#b5bac2', x + 6, y + 22, 20, 2);
+      disc(c, OUTLINE, x + 16, y + 14, 9); disc(c, '#a8adb6', x + 16, y + 14, 8); disc(c, '#d0d4da', x + 13, y + 11, 4);
+      rect(c, OUTLINE, x + 8, y + 1, 5, 9); rect(c, '#a8adb6', x + 9, y + 2, 3, 7);
+      rect(c, OUTLINE, x + 19, y + 1, 5, 9); rect(c, '#a8adb6', x + 20, y + 2, 3, 7);
+      rect(c, '#5a5f68', x + 12, y + 13, 2, 2); rect(c, '#5a5f68', x + 18, y + 13, 2, 2);
+      rect(c, '#d8b84a', x + 10, y + 25, 12, 2);
+      break;
+    }
+    case 'itemshelf': {
+      // 상점 진열대: 위 칸 회복약 병, 가운데 칸 감긴 로프, 아래 칸 상자
+      rect(c, '#e9dcc0', x, y, TILE, TILE);
+      rect(c, OUTLINE, x + 1, y, 30, 32);
+      rect(c, '#9a6a34', x + 2, y + 1, 28, 30);
+      for (let r = 0; r < 3; r += 1) { rect(c, '#6e4620', x + 3, y + 2 + r * 10, 26, 8); rect(c, '#c28a4c', x + 2, y + 10 + r * 10, 28, 2); }
+      const bottle = ['#8a5ac8', '#e8484f', '#3f78d8'];
+      for (let k = 0; k < 4; k += 1) {
+        const bx = x + 4 + k * 6;
+        rect(c, bottle[(k + seed) % 3], bx, y + 5, 4, 5); rect(c, '#ffffff', bx + 1, y + 6, 1, 2); rect(c, '#e8c088', bx + 1, y + 3, 2, 2);
+      }
+      for (let k = 0; k < 3; k += 1) {
+        const rx = x + 8 + k * 8;
+        disc(c, '#7a4a1a', rx, y + 17, 3); disc(c, '#d9a869', rx, y + 17, 2); rect(c, '#7a4a1a', rx, y + 17, 1, 1);
+      }
+      for (let k = 0; k < 3; k += 1) { rect(c, k === 1 ? '#e8484f' : '#d9a869', x + 4 + k * 8, y + 25, 7, 5); rect(c, '#6e4620', x + 4 + k * 8, y + 27, 7, 1); }
+      break;
+    }
+    case 'plant': {
+      // 화분: 구역마다 다른 식물(고사리, 선인장, 작은 전나무, 불꽃 백합)
+      base(c, t, x, y, frame, region, seed);
+      disc(c, 'rgba(0,0,0,0.2)', x + 16, y + 29, 8);
+      rect(c, OUTLINE, x + 9, y + 19, 14, 12); rect(c, '#c8643a', x + 10, y + 20, 12, 10); rect(c, '#e88a54', x + 10, y + 20, 12, 2); rect(c, '#9a4424', x + 18, y + 22, 3, 8);
+      if (region === 'desert') {
+        rect(c, '#1e5a2c', x + 13, y + 5, 7, 15); rect(c, '#2e8a44', x + 14, y + 6, 5, 13); rect(c, '#52b868', x + 15, y + 7, 1, 11);
+        rect(c, '#1e5a2c', x + 8, y + 10, 6, 5); rect(c, '#2e8a44', x + 9, y + 11, 4, 3);
+        rect(c, '#f283c1', x + 15, y + 3, 3, 3);
+      } else if (region === 'snow') {
+        for (let r = 0; r < 14; r += 1) { const hw = 1 + Math.floor(r / 2); rect(c, '#1e4a3a', x + 16 - hw, y + 5 + r, hw * 2, 1); rect(c, '#2e6a50', x + 16 - hw + 1, y + 5 + r, Math.max(1, hw - 1), 1); }
+        rect(c, '#ffffff', x + 12, y + 11, 8, 2); rect(c, '#ffffff', x + 10, y + 16, 12, 2); rect(c, '#f7d340', x + 15, y + 3, 2, 2);
+      } else if (region === 'volcano') {
+        rect(c, '#2a5a2a', x + 15, y + 8, 2, 12); rect(c, '#3a7a3a', x + 11, y + 13, 5, 2); rect(c, '#3a7a3a', x + 17, y + 11, 5, 2);
+        disc(c, '#e8481c', x + 16, y + 7, 5); disc(c, frame ? '#ffb02e' : '#ff8a2a', x + 16, y + 7, 3); rect(c, '#fff2a8', x + 15, y + 6, 2, 2);
+      } else {
+        disc(c, '#1f5c26', x + 16, y + 12, 9); disc(c, '#3a9a4a', x + 15, y + 11, 7); disc(c, '#62c04b', x + 12, y + 8, 3);
+        rect(c, '#8fe07a', x + 18, y + 6, 2, 4); rect(c, '#8fe07a', x + 8, y + 12, 3, 2);
+      }
       break;
     }
     case 'iwall2': {

@@ -43,6 +43,15 @@ export interface Sign {
   text: string;
 }
 
+/** 반짝이는 숨은 물건: 바라보고 A(또는 밟기)로 한 번만 줍는다 */
+export interface HiddenItem {
+  id: string;
+  x: number;
+  y: number;
+  gift: 'rope' | 'sturdy' | 'potion' | 'coins';
+  n: number;
+}
+
 export interface MapData {
   id: string;
   name: string;
@@ -51,4 +60,5 @@ export interface MapData {
   warps: Warp[];
   npcs: Npc[];
   signs: Sign[];
+  items?: HiddenItem[];
 }

@@ -12,4 +12,4 @@ import type { MapData } from './types.ts';
 export const OUTDOORS: MapData[] = [town, route1, forest, route2, desert, route3, snow, route4, volcano];
 export const MAPS: Record<string, MapData> = Object.fromEntries([...OUTDOORS, ...INTERIORS].map((m) => [m.id, m]));
 export const getMap = (id: string): MapData | undefined => MAPS[id];
-export type { MapData, Npc, Warp, Sign, Dir } from './types.ts';
+export type { MapData, Npc, Warp, Sign, Dir, HiddenItem } from './types.ts';

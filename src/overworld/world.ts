@@ -3,7 +3,8 @@ import type { Dir, MapData, Npc, Sign } from './maps/types.ts';
 
 export type { Dir };
 export const STEP_MS = 180;
-export const ENCOUNTER_RATE = 0.12;
+/** 숨은 풀숲 조우 확률(눈에 보이는 야생 오디가 주된 만남이라 낮다) */
+export const ENCOUNTER_RATE = 0.05;
 
 export interface PlayerState {
   map: string;
@@ -144,3 +145,93 @@ export function spawnOf(
   if (ok(respawn)) return { ...respawn, facing: 'down' };
   return { ...start };
 }
+
+// ---------- 눈에 보이는 야생 오디(레츠고 방식) ----------
+
+export interface WildMon {
+  id: number;
+  speciesId: number;
+  level: number;
+  x: number;
+  y: number;
+  facing: Dir;
+  /** 플레이어를 알아채면 다가온다 */
+  bold: boolean;
+}
+
+const key = (x: number, y: number) => `${x},${y}`;
+const habitatCache = new WeakMap<MapData, Pos[]>();
+/** 야생 오디가 다닐 수 있는 칸: 풀숲이거나 풀숲 바로 옆의 걸을 수 있는 칸(워프 칸 제외) */
+export function wildHabitat(map: MapData): Pos[] {
+  let h = habitatCache.get(map);
+  if (h) return h;
+  h = [];
+  const tiles = tilesOf(map);
+  const warps = new Set(map.warps.map((w) => key(w.x, w.y)));
+  const tall = (x: number, y: number) => { const t = tiles[y]?.[x]; return t !== undefined && isGrass(t); };
+  for (let y = 0; y < tiles.length; y += 1) {
+    for (let x = 0; x < tiles[y].length; x += 1) {
+      if (!isWalkable(tiles[y][x]) || warps.has(key(x, y))) continue;
+      if (tall(x, y) || tall(x + 1, y) || tall(x - 1, y) || tall(x, y + 1) || tall(x, y - 1)) h.push({ x, y });
+    }
+  }
+  habitatCache.set(map, h);
+  return h;
+}
+const inHabitat = (map: MapData, x: number, y: number) => wildHabitat(map).some((p) => p.x === x && p.y === y);
+
+/** 풀숲 수에 맞춘 야생 오디 수(풀숲이 없으면 0, 많아야 6) */
+export const wildCap = (map: MapData): number => {
+  const n = wildHabitat(map).length;
+  return n === 0 ? 0 : Math.max(3, Math.min(6, Math.floor(n / 25)));
+};
+
+/** 새로 나타날 칸: 서식지 중 비어 있고 플레이어에게서 minDist칸 이상 떨어진 곳. 없으면 null */
+export function spawnWild(map: MapData, taken: readonly Pos[], player: Pos, rand: () => number, minDist = 4): Pos | null {
+  const free = wildHabitat(map).filter((p) =>
+    Math.abs(p.x - player.x) + Math.abs(p.y - player.y) >= minDist && !taken.some((o) => o.x === p.x && o.y === p.y));
+  return free.length ? free[Math.floor(rand() * free.length)] : null;
+}
+
+/** 대담한 오디가 플레이어를 알아채는 거리 */
+export const NOTICE = 3;
+export const noticed = (m: WildMon, player: Pos) => m.bold && Math.abs(m.x - player.x) + Math.abs(m.y - player.y) <= NOTICE;
+
+/**
+ * 야생 오디 한 걸음. 알아챘으면 플레이어 쪽으로, 아니면 아무 방향(서식지 안에서만).
+ * 다른 오디·NPC·막힌 칸으로는 가지 않는다. 플레이어 칸으로 가려 하면 touch(전투 시작)
+ */
+export function wildStep(
+  m: WildMon, map: MapData, others: readonly Pos[], player: Pos, rand: () => number,
+): { x: number; y: number; facing: Dir; moved: boolean; touch: boolean } {
+  const dirs: Dir[] = ['up', 'down', 'left', 'right'];
+  let order: Dir[];
+  if (noticed(m, player)) {
+    const dx = player.x - m.x;
+    const dy = player.y - m.y;
+    const h: Dir = dx > 0 ? 'right' : 'left';
+    const v: Dir = dy > 0 ? 'down' : 'up';
+    order = Math.abs(dx) >= Math.abs(dy) ? [h, v] : [v, h];
+    if (dx === 0) order = [v];
+    if (dy === 0) order = [h];
+  } else {
+    order = [dirs[Math.floor(rand() * 4)]];
+  }
+  for (const d of order) {
+    const nx = m.x + DELTA[d].dx;
+    const ny = m.y + DELTA[d].dy;
+    if (nx === player.x && ny === player.y) return { x: m.x, y: m.y, facing: d, moved: false, touch: true };
+    const t = tileAt(map, nx, ny);
+    if (t === undefined || !isWalkable(t) || others.some((o) => o.x === nx && o.y === ny)) continue;
+    if (map.warps.some((w) => w.x === nx && w.y === ny)) continue;
+    if (!noticed(m, player) && !inHabitat(map, nx, ny)) continue;
+    return { x: nx, y: ny, facing: d, moved: true, touch: false };
+  }
+  return { x: m.x, y: m.y, facing: order[0], moved: false, touch: false };
+}
+
+// ---------- 숨은 물건 ----------
+
+/** 숨은 물건을 이미 주웠는지(저장 flags에 item:id) */
+export const itemFlag = (id: string) => `item:${id}`;
+export const hiddenItems = (map: MapData, flags: readonly string[]) => (map.items ?? []).filter((i) => !flags.includes(itemFlag(i.id)));

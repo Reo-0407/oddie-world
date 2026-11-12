@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAPS } from './maps/index.ts';
 import { rollWild } from './encounters.ts';
-import { canStep, facingTile, interactTarget, npcInSight, spawnOf, stepPlayer, tileAt, mapWidth, type PlayerState } from './world.ts';
+import { canStep, facingTile, hiddenItems, interactTarget, itemFlag, npcInSight, spawnOf, spawnWild, stepPlayer, tileAt, mapWidth, wildCap, wildHabitat, wildStep, type PlayerState, type WildMon } from './world.ts';
 import { TOWN_RESPAWN, TOWN_START } from '../game/save.ts';
 import { isGrass, isWalkable } from './tiles.ts';
 
@@ -13,8 +13,8 @@ const get = (id: string) => MAPS[id];
 describe('지도 데이터', () => {
   it('모든 줄 길이가 같고 크기가 맞다', () => {
     for (const m of Object.values(MAPS)) expect(new Set(m.rows.map((r) => r.length)).size, m.id).toBe(1);
-    expect([mapWidth(town), town.rows.length]).toEqual([30, 24]);
-    expect([mapWidth(route), route.rows.length]).toEqual([40, 14]);
+    expect([mapWidth(town), town.rows.length]).toEqual([30, 27]);
+    expect([mapWidth(route), route.rows.length]).toEqual([40, 16]);
   });
   it('워프 칸·도착 칸·NPC는 모두 걸을 수 있고 도착한 칸은 다시 워프가 아니다', () => {
     for (const m of Object.values(MAPS)) {
@@ -70,11 +70,11 @@ describe('풀숲 조우', () => {
   const grassY = route.rows.findIndex((r) => r.includes('"'));
   const gx = route.rows[grassY].indexOf('"');
   it('풀숲 칸은 풀숲이다', () => expect(isGrass(tileAt(route, gx, grassY)!)).toBe(true));
-  it('난수가 12% 미만이면 조우, 아니면 없음', () => {
+  it('난수가 5% 미만이면 조우, 아니면 없음', () => {
     const from = at('route1', gx - 1, grassY, 'right');
     if (!canStep(route, [], gx - 1, grassY)) return;
-    expect(stepPlayer(from, 'right', route, [], () => 0.11, get).encounter).toBe(true);
-    expect(stepPlayer(from, 'right', route, [], () => 0.12, get).encounter).toBe(false);
+    expect(stepPlayer(from, 'right', route, [], () => 0.04, get).encounter).toBe(true);
+    expect(stepPlayer(from, 'right', route, [], () => 0.05, get).encounter).toBe(false);
   });
   it('길에서는 조우가 없다', () => {
     expect(stepPlayer(at('route1', 2, 6, 'right'), 'right', route, [], () => 0, get).encounter).toBe(false);
@@ -126,5 +126,45 @@ describe('불러온 위치 검사', () => {
     expect(spawnOf(at('town', 999, 999), TOWN_RESPAWN, TOWN_START, get, p)).toEqual({ ...TOWN_RESPAWN, facing: 'down' });
     expect(spawnOf(at('town', wall.x, wall.y), TOWN_RESPAWN, TOWN_START, get, p)).toEqual({ ...TOWN_RESPAWN, facing: 'down' });
     expect(spawnOf(at('nowhere', 1, 1), { map: 'nowhere', x: 1, y: 1 }, TOWN_START, get, p)).toEqual(TOWN_START);
+  });
+});
+
+describe('눈에 보이는 야생 오디', () => {
+  const mon = (x: number, y: number, bold = false): WildMon => ({ id: 1, speciesId: 1, level: 3, x, y, facing: 'down', bold });
+  const seq = (...v: number[]) => { let i = 0; return () => v[i++ % v.length]; };
+  it('풀숲이 있는 길에만 산다(마을에는 없다)', () => {
+    expect(wildCap(town)).toBe(0);
+    expect(wildCap(route)).toBeGreaterThanOrEqual(3);
+    expect(wildCap(route)).toBeLessThanOrEqual(6);
+    for (const p of wildHabitat(route)) expect(canStep(route, [], p.x, p.y)).toBe(true);
+  });
+  it('플레이어 가까이나 다른 오디 자리에는 나타나지 않는다', () => {
+    const player = { x: 5, y: 3 };
+    for (let k = 0; k < 30; k += 1) {
+      const p = spawnWild(route, [{ x: 6, y: 3 }], player, Math.random)!;
+      expect(Math.abs(p.x - player.x) + Math.abs(p.y - player.y)).toBeGreaterThanOrEqual(4);
+      expect(p).not.toEqual({ x: 6, y: 3 });
+    }
+  });
+  it('어슬렁거릴 때는 서식지 안 빈칸으로만 가고 다른 오디는 피한다', () => {
+    const h = wildHabitat(route);
+    const start = h[Math.floor(h.length / 2)];
+    for (let k = 0; k < 4; k += 1) {
+      const r = wildStep(mon(start.x, start.y), route, [], { x: 0, y: 0 }, seq(k / 4 + 0.01));
+      if (r.moved) expect(h.some((p) => p.x === r.x && p.y === r.y)).toBe(true);
+    }
+    const blockedAll = [{ x: start.x + 1, y: start.y }, { x: start.x - 1, y: start.y }, { x: start.x, y: start.y + 1 }, { x: start.x, y: start.y - 1 }];
+    for (let k = 0; k < 4; k += 1) expect(wildStep(mon(start.x, start.y), route, blockedAll, { x: 0, y: 0 }, seq(k / 4 + 0.01)).moved).toBe(false);
+  });
+  it('대담한 오디는 3칸 안의 플레이어에게 다가오고, 닿으면 전투(touch)', () => {
+    const h = wildHabitat(route).find((p) => canStep(route, [], p.x + 1, p.y) && canStep(route, [], p.x + 2, p.y))!;
+    const near = wildStep(mon(h.x, h.y, true), route, [], { x: h.x + 2, y: h.y }, () => 0.5);
+    expect(near).toMatchObject({ moved: true, x: h.x + 1, facing: 'right' });
+    expect(wildStep(mon(h.x, h.y, true), route, [], { x: h.x + 1, y: h.y }, () => 0.5)).toMatchObject({ touch: true, moved: false });
+  });
+  it('숨은 물건은 주우면(플래그) 사라진다', () => {
+    const items = route.items ?? [];
+    expect(items.length).toBeGreaterThan(0);
+    expect(hiddenItems(route, [itemFlag(items[0].id)]).length).toBe(items.length - 1);
   });
 });

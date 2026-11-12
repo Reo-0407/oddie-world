@@ -1,30 +1,25 @@
 import type { MapData, NpcLook } from './types.ts';
-import { border, fill, grid, put, rng, rows, scatter } from './util.ts';
 
-// 2번 길(사막): 1번 길 동쪽 끝에서 사막 마을까지. 모래 물결, 선인장, 사암 바위, 마른 풀숲
-const W = 44;
-const H = 16;
-const g = grid(W, H, '.');
-border(g, 'o', 2);
-const rand = rng(22);
-scatter(g, rand, 'T', 10, 'o');
-
-fill(g, 2, 2, 6, 4, 's'); fill(g, 34, 2, 7, 2, 's'); fill(g, 6, 12, 10, 2, 's'); // 고운 모래 언덕
-// 마른 풀숲
-for (const [x, y, w, h] of [[2, 10, 8, 3], [14, 6, 11, 4], [31, 5, 9, 4], [15, 10, 10, 3], [33, 12, 9, 2], [20, 2, 6, 1]] as const) fill(g, x, y, w, h, '"');
-
-// 길: 서쪽 7~8줄 → 위로 → 3~4줄 → 아래로 → 10~11줄 → 동쪽
-fill(g, 0, 7, 13, 2, ':');
-fill(g, 11, 3, 2, 6, ':');
-fill(g, 11, 3, 18, 2, ':');
-fill(g, 27, 3, 2, 9, ':');
-fill(g, 27, 10, 17, 2, ':');
-
-scatter(g, rand, 'C', 22);
-scatter(g, rand, 'o', 8);
-for (const [x, y] of [[6, 6], [20, 5], [35, 9], [2, 6], [42, 9]]) put(g, x, y, '.');
-put(g, 2, 6, 'Y');
-put(g, 42, 9, 'Y');
+// 2번 길(사막): 1번 길 동쪽 끝에서 사막 마을까지. 사암 절벽(o) 테두리, 고운 모래 언덕(s),
+// 마른 풀숲, 선인장 무리(길섶은 비워 둔다), 동쪽 끝 야자수 오아시스
+const ROWS = [
+  'oooooooooooooooooooooooooooooooooooooooooooo',
+  'ooTooooooooooooooooooooToooooooooooooooToooo',
+  'oossss.C..o.........o.........""""""...Toooo',
+  'oosssss.C..::::::::::::::::::."""""".C.T~~~o',
+  'oossss.CC..::::::::::::::::::.."""""".T~~~~o',
+  'oosss.o....::..............::..""""""..T~~To',
+  'ooY........::."""""""""""".::..""""""".C.Coo',
+  ':::::::::::::."""""""""""".::.o"""""""...ooo',
+  ':::::::::::::."""""""""""..::...""""".C...oo',
+  'oo.............C....o......::.............Yo',
+  'oo"""""""".C..ssss.......C.:::::::::::::::::',
+  'oo""""""""...o"""""""""""..:::::::::::::::::',
+  'oo""""""".C.ss"""""""""".C.................o',
+  'oosssC......o."""""""".sssss.C."""""""".C.oo',
+  'oooooooooToooooooooooosssooooooooooooooooooo',
+  'oooooooooooooooooooooooooooooooooooooooooooo',
+];
 
 const look = (hair: string, shirt: string, pants: string, hat?: string): NpcLook => ({ hair, skin: '#e8b890', shirt, pants, hat });
 
@@ -32,7 +27,7 @@ export const route2: MapData = {
   id: 'route2',
   name: '2번 길',
   region: 'desert',
-  rows: rows(g),
+  rows: ROWS,
   warps: [
     { x: 0, y: 7, to: { map: 'route1', x: 38, y: 6, facing: 'left' } },
     { x: 0, y: 8, to: { map: 'route1', x: 38, y: 6, facing: 'left' } },
@@ -47,8 +42,12 @@ export const route2: MapData = {
       lines: ['밤이 되면 사막은 엄청 추워져.'],
       trainer: { sight: 2, before: ['내 텐트 앞을 지나가려면 이겨야지!'], after: ['캠핑은 역시 쉬는 게 최고야.'] } },
     { id: 'route2-ranger', name: '사막 순찰대', x: 35, y: 9, facing: 'down', look: look('#3a2a20', '#e0b030', '#5a4a2a', '#c27a44'),
-      lines: ['사막 마을은 바로 저 앞이야.'],
+      lines: ['사막 마을은 바로 저 앞이야. 저 위 야자수 옆 물웅덩이도 가 봐!'],
       trainer: { sight: 2, before: ['순찰 중! 실력을 확인하겠다!'], after: ['좋아, 통과!'] } },
+  ],
+  items: [
+    { id: 'r2-potion', x: 40, y: 7, gift: 'potion', n: 2 },
+    { id: 'r2-coins', x: 3, y: 12, gift: 'coins', n: 100 },
   ],
   signs: [
     { x: 2, y: 6, text: '2번 길 — 동쪽으로 사막 마을. 선인장 가시 조심!' },
