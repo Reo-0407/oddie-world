@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { START_LEVEL, TOWN_START, type SaveData } from '../game/save.ts';
-import { markCaught } from '../game/dex.ts';
+import { LAB_ROPES, TOWN_START, takeStarter, type SaveData } from '../game/save.ts';
 import { speciesById } from '../data/index.ts';
 import { getMap } from '../overworld/maps/index.ts';
-import type { HiddenItem, MapData, Npc } from '../overworld/maps/types.ts';
+import type { MapData, Npc } from '../overworld/maps/types.ts';
 import { createRenderer, type Actor, type MonActor } from '../overworld/render.ts';
 import { PLAYER_LOOKS } from '../overworld/sprites.ts';
 import { kindOf, TILE } from '../overworld/tiles.ts';
@@ -22,7 +21,7 @@ import { dayPhase, nowHour, PHASE_ICON, PHASE_NAME, skyTint, type Tint } from '.
 import { levelTag, NURSE_ROPES, nurseGivesRopes } from '../game/fun.ts';
 import { fillQuests } from '../game/quests.ts';
 import { expToNext, MAX_LEVEL } from '../game/growth.ts';
-import { questCtx, questsAfter } from '../battle/outcome.ts';
+import { collectItem, questCtx } from '../battle/outcome.ts';
 import { OddieArt } from './OddieArt.tsx';
 
 export interface EncounterInfo { speciesId: number; level: number; region: RegionId; shiny?: boolean; strong?: boolean }
@@ -30,8 +29,9 @@ export interface EncounterInfo { speciesId: number; level: number; region: Regio
 interface Props {
   data: SaveData;
   onData(next: SaveData): void;
-  onEncounter(info: EncounterInfo): void;
-  onTrainer(npcId: string): void;
+  /** 전투를 시작하면 true. false면 월드가 다시 움직인다(갇히지 않게) */
+  onEncounter(info: EncounterInfo): boolean;
+  onTrainer(npcId: string): boolean;
   /** 처음 그릴 때 보여 줄 대화(전투 결과 등) */
   message?: { speaker?: string; pages: string[] } | null;
   /** 둥근 메뉴 버튼 안의 항목들 */
@@ -63,17 +63,18 @@ const FLASH_MS = 380;
 const cloneNpcs = (map: MapData, data: SaveData): NpcRt[] => placeNpcs(map, progressOf(data)).map((n) => ({ ...n, anim: null, bubble: false }));
 const HEAL_MS = 900;
 
-type Anim = { fx: number; fy: number; t: number };
+/** ms: 이 걸음에 걸리는 시간(달리면 짧다). 없으면 STEP_MS */
+type Anim = { fx: number; fy: number; t: number; ms?: number };
 /** 필드 위 야생 오디 한 마리의 실행 상태 */
 interface WildRt {
   mon: WildMon; anim: Anim | null; wait: number; seen: boolean; bubble: number; appear: number; leaving: number;
   shiny: boolean; strong: boolean; sparkle: number;
 }
-const GIFT_NAME: Record<HiddenItem['gift'], string> = { rope: '로프', sturdy: '튼튼한 로프', potion: '회복약', coins: '코인' };
 const HAPPY = ['은(는) 기분이 좋아 보인다!', '은(는) 신나서 깡충 뛰었다!', '이(가) 너에게 꼭 붙어 왔다.', '은(는) 다음 모험이 기대되나 보다!'];
 const WILD_STEP_MS = 260;
-/** 박사가 스타터와 함께 주는 로프 */
-export const LAB_ROPES = 5;
+/** 달리기: B(X)·Shift를 누른 채 걷거나 십자키를 길게 누르면 1.6배 빠르다 */
+const RUN_SPEED = 1.6;
+const RUN_HOLD_MS = 450;
 
 /** 위에서 내려다보는 2D 월드: 캔버스 + 키보드/터치 조작 + 대화 상자 */
 export function GameView({ data, onData, onEncounter, onTrainer, message, menu }: Props) {
@@ -89,14 +90,18 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
   const [menuOpen, setMenuOpen] = useState(false);
   const [overlay, setOverlay] = useState<null | 'shop' | 'starter'>(null);
   /** 메뉴를 열 때 바로 보여 줄 창(퀘스트 게시판) */
-  const [menuStart, setMenuStart] = useState<'quest' | undefined>(undefined);
+  const [menuStart, setMenuStart] = useState<'quest' | 'dex' | undefined>(undefined);
   const [phase, setPhase] = useState(() => dayPhase(nowHour()));
   const menuRef = useRef(false);
   menuRef.current = menuOpen || overlay !== null;
   const overlayRef = useRef(overlay);
   overlayRef.current = overlay;
   const firstMessage = useRef(message);
-  const api = useRef<{ press(d: Dir): void; release(d: Dir): void; a(): void; say(pages: string[], speaker?: string): void } | null>(null);
+  const api = useRef<{
+    press(d: Dir, pad?: boolean): void; release(d: Dir): void; a(): void; say(pages: string[], speaker?: string): void;
+    /** 메뉴 열기: 걷는 중·전투로 넘어가는 중이면 멈춘 뒤에 연다 */
+    menu(start?: 'dex'): void;
+  } | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -116,7 +121,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
     setMapName(map.name);
 
     const rt = {
-      time: 0, anim: null as null | { fx: number; fy: number; t: number }, parity: 0, cooldown: 0,
+      time: 0, anim: null as Anim | null, parity: 0, cooldown: 0,
       pending: null as null | { warp?: PlayerState; encounter?: boolean },
       fade: null as null | { t: number; dest: PlayerState; switched: boolean },
       flash: null as null | { t: number; info: EncounterInfo },
@@ -138,6 +143,11 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       ropeGiven: false,
       tint: skyTint(nowHour()) as Tint,
       tintAt: 0,
+      /** 열어 달라고 한 메뉴(멈추면 연다) */
+      wantMenu: null as null | 'main' | 'dex',
+      /** 달리기 키를 누르고 있나, 십자키를 누르기 시작한 시각(-1 = 안 누름) */
+      runKey: false,
+      padAt: -1,
     };
     /** 지금 시각·선두·연속 잡기로 야생 오디를 굴린다 */
     const roll = () => {
@@ -261,23 +271,18 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       const d = dataRef.current;
       const it = hiddenItems(map, d.flags).find((i) => i.x === x && i.y === y);
       if (!it) return false;
-      const next: SaveData = { ...d, flags: [...d.flags, itemFlag(it.id)] };
-      if (it.gift === 'rope') next.ropes = { ...d.ropes, basic: d.ropes.basic + it.n };
-      else if (it.gift === 'sturdy') next.ropes = { ...d.ropes, sturdy: d.ropes.sturdy + it.n };
-      else if (it.gift === 'potion') next.potions = d.potions + it.n;
-      else next.coins = d.coins + it.n;
-      const q = questsAfter(next, { kind: 'findItem' });
+      const q = collectItem(d, it);
       setData(q.save);
       renderer.emit('sparkle', x * TILE, y * TILE);
       sfx('ding');
       rt.held = [];
-      openDialog({ pages: [`반짝이는 곳에서 ${GIFT_NAME[it.gift]} ${it.n}개를 주웠다!`, ...q.lines] });
+      openDialog({ pages: q.lines });
       return true;
     };
 
     const setData = (next: SaveData) => { dataRef.current = next; cb.current.onData(next); };
 
-    const fightTrainer = (id: string) => { rt.locked = true; cb.current.onTrainer(id); };
+    const fightTrainer = (id: string) => { rt.locked = cb.current.onTrainer(id) !== false; };
 
     const checkTrainers = () => {
       if (dataRef.current.team.length === 0) return;
@@ -382,12 +387,14 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         if (gate) { rt.held = []; speak(gate); }
         return;
       }
-      rt.anim = { fx: player.x, fy: player.y, t: 0 };
+      const running = rt.runKey || (rt.padAt >= 0 && rt.time - rt.padAt >= RUN_HOLD_MS);
+      const ms = running ? Math.round(STEP_MS / RUN_SPEED) : STEP_MS;
+      rt.anim = { fx: player.x, fy: player.y, t: 0, ms };
       rt.parity ^= 1;
       if (!r.warped) {
         // 따라오는 오디는 내가 있던 칸으로
         const fo = rt.follower;
-        fo.anim = { fx: fo.x, fy: fo.y, t: 0 };
+        fo.anim = { fx: fo.x, fy: fo.y, t: 0, ms };
         fo.dir = fo.x === from.x && fo.y === from.y ? dir : fo.x < from.x ? 'right' : fo.x > from.x ? 'left' : fo.y < from.y ? 'down' : 'up';
         fo.x = from.x; fo.y = from.y;
         const k = kindOf(tileAt(map, r.state.x, r.state.y)!);
@@ -470,8 +477,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         if (rt.flash.t >= FLASH_MS) {
           const info = rt.flash.info;
           rt.flash = null;
-          rt.locked = true;
-          cb.current.onEncounter(info);
+          rt.locked = cb.current.onEncounter(info) !== false;
         }
       } else if (rt.heal) {
         rt.heal.t += dt;
@@ -479,7 +485,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       } else if (rt.anim) {
         rt.anim.t += dt;
         if (!rt.dialogOpen && !menuRef.current) updateWild(dt);
-        if (rt.anim && rt.anim.t >= STEP_MS && !rt.flash) finishStep();
+        if (rt.anim && rt.anim.t >= (rt.anim.ms ?? STEP_MS) && !rt.flash) finishStep();
       } else if (rt.ev) {
         updateEvent(dt);
       } else if (!rt.dialogOpen && !menuRef.current && !rt.locked) {
@@ -489,8 +495,10 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         if (dir && rt.cooldown === 0 && !rt.flash) tryStep(dir);
       }
 
+      if (rt.wantMenu && idle()) openMenu(rt.wantMenu);
+
       const fo = rt.follower;
-      if (fo.anim) { fo.anim.t += dt; if (fo.anim.t >= STEP_MS) fo.anim = null; }
+      if (fo.anim) { fo.anim.t += dt; if (fo.anim.t >= (fo.anim.ms ?? STEP_MS)) fo.anim = null; }
       if (fo.heart > 0) fo.heart -= dt;
       // 평범한 마을 사람은 가끔 고개를 돌린다(트레이너·문지기·간호사·점원은 그대로)
       rt.idleTurn -= dt;
@@ -501,8 +509,8 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         if (n) n.facing = (['up', 'down', 'left', 'right'] as Dir[])[Math.floor(Math.random() * 4)];
       }
 
-      const lerp = (x: number, y: number, a: { fx: number; fy: number; t: number } | null) => {
-        const k = a ? Math.min(1, a.t / STEP_MS) : 1;
+      const lerp = (x: number, y: number, a: Anim | null) => {
+        const k = a ? Math.min(1, a.t / (a.ms ?? STEP_MS)) : 1;
         return a ? { px: (a.fx + (x - a.fx) * k) * TILE, py: (a.fy + (y - a.fy) * k) * TILE } : { px: x * TILE, py: y * TILE };
       };
       const moving = rt.anim ? 1 + rt.parity : 0;
@@ -521,7 +529,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       }));
       const follower: MonActor | null = lead && (fo.x !== player.x || fo.y !== player.y || fo.anim) ? {
         ...lerp(fo.x, fo.y, fo.anim), speciesId: lead.speciesId, dir: fo.dir,
-        hop: fo.anim ? Math.min(1, fo.anim.t / STEP_MS) : fo.heart > 0 ? (fo.heart % 350) / 350 : 0,
+        hop: fo.anim ? Math.min(1, fo.anim.t / (fo.anim.ms ?? STEP_MS)) : fo.heart > 0 ? (fo.heart % 350) / 350 : 0,
         bubble: fo.heart > 0 ? 'heart' : null, level: lead.level, tag: 'me', shiny: lead.shiny,
       } : null;
       // 낮·밤 색은 몇 초마다 다시 잰다
@@ -551,12 +559,27 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
     }
     if (firstMessage.current) openDialog({ ...firstMessage.current, after: finish() });
 
-    const press = (d: Dir) => {
+    const press = (d: Dir, pad = false) => {
       if (rt.dialogOpen) { if (d === 'up' || d === 'down') control.current?.move(d); return; }
+      if (pad && rt.held.length === 0) rt.padAt = rt.time;
       rt.held = [...rt.held.filter((h) => h !== d), d];
     };
-    const release = (d: Dir) => { rt.held = rt.held.filter((h) => h !== d); };
-    api.current = { press, release, a: pressA, say: (pages, speaker) => openDialog({ speaker, pages }) };
+    const release = (d: Dir) => {
+      rt.held = rt.held.filter((h) => h !== d);
+      if (rt.held.length === 0) rt.padAt = -1;
+    };
+    /** 멈춰 있을 때만 연다. 아니면 멈추는 대로 연다(걷는 중·트레이너가 다가오는 중에 메뉴가 겹치지 않게) */
+    function openMenu(start: 'main' | 'dex') {
+      if (!idle()) { rt.wantMenu = start; return; }
+      rt.wantMenu = null;
+      rt.held = [];
+      rt.padAt = -1;
+      menuRef.current = true;
+      sfx('menuOpen');
+      setMenuStart(start === 'dex' ? 'dex' : undefined);
+      setMenuOpen(true);
+    }
+    api.current = { press, release, a: pressA, say: (pages, speaker) => openDialog({ speaker, pages }), menu: (start) => openMenu(start ?? 'main') };
 
     const onKeyDown = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -584,11 +607,19 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       } else if (B_KEYS.has(e.code)) {
         e.preventDefault();
         if (e.repeat || rt.dialogOpen) return;
-        if (idle()) { rt.held = []; sfx('menuOpen'); setMenuOpen(true); }
+        // 걸으면서 누르면 달리기, 서서 누르면 메뉴
+        if (rt.held.length > 0) rt.runKey = true;
+        else openMenu('main');
+      } else if (e.key === 'Shift') {
+        rt.runKey = true;
       }
     };
-    const onKeyUp = (e: KeyboardEvent) => { const dir = KEY_DIR[e.code]; if (dir) release(dir); };
-    const onBlur = () => { rt.held = []; };
+    const onKeyUp = (e: KeyboardEvent) => {
+      const dir = KEY_DIR[e.code];
+      if (dir) release(dir);
+      if (B_KEYS.has(e.code) || e.key === 'Shift') rt.runKey = false;
+    };
+    const onBlur = () => { rt.held = []; rt.runKey = false; rt.padAt = -1; };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
@@ -606,7 +637,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
   const dpad = (dir: Dir, label: string, cls: string) => (
     <button
       type="button" className={`gv-btn ${cls}`} aria-label={label}
-      onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); api.current?.press(dir); }}
+      onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); api.current?.press(dir, true); }}
       onPointerUp={() => api.current?.release(dir)}
       onPointerCancel={() => api.current?.release(dir)}
       onLostPointerCapture={() => api.current?.release(dir)}
@@ -618,7 +649,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
     <div className="gv" ref={wrapRef} onContextMenu={(e) => e.preventDefault()}>
       <canvas ref={canvasRef} className="gv-canvas" onPointerDown={(e) => { e.preventDefault(); api.current?.a(); }} />
       <div key={mapName} className="gv-title">{mapName}</div>
-      <Hud data={data} phase={phase} />
+      <Hud data={data} phase={phase} onDex={() => api.current?.menu('dex')} />
       {dialog && (
         <Dialog
           key={dialog.key} speaker={dialog.speaker} pages={dialog.pages} choices={dialog.choices}
@@ -629,7 +660,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         {dpad('up', '▲', 'up')}{dpad('left', '◀', 'left')}{dpad('right', '▶', 'right')}{dpad('down', '▼', 'down')}
       </div>
       {!dialog && !menuOpen && (
-        <button type="button" className="gv-menu-btn" aria-label="메뉴" data-nosfx onPointerDown={(e) => e.stopPropagation()} onClick={() => { sfx('menuOpen'); setMenuOpen(true); }}>
+        <button type="button" className="gv-menu-btn" aria-label="메뉴" data-nosfx onPointerDown={(e) => e.stopPropagation()} onClick={() => api.current?.menu()}>
           <span />
         </button>
       )}
@@ -646,11 +677,8 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       {overlay === 'starter' && (
         <div className="gv-overlay" onPointerDown={(e) => e.stopPropagation()}>
           <StarterScreen onPick={(id) => {
-            const d = dataRef.current;
-            const next: SaveData = {
-              ...d, team: [{ speciesId: id, level: START_LEVEL, exp: 0 }], playerLevel: START_LEVEL, dex: markCaught(d.dex, id),
-              ropes: { ...d.ropes, basic: d.ropes.basic + LAB_ROPES }, flags: d.flags.includes('starter') ? d.flags : [...d.flags, 'starter'],
-            };
+            const next = takeStarter(dataRef.current, id);
+            if (!next) return;
             dataRef.current = next;
             onData(next);
             setOverlay(null);
@@ -664,14 +692,14 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
 }
 
 /** 왼쪽 위 작은 표시: 선두 오디 레벨·경험치, 코인(늘면 +N 튀어 오름), 낮/밤 */
-/** 마지막으로 HUD에 보인 코인(전투 뒤 월드를 새로 그려도 +N을 보여 주려고 모듈에 둔다) */
-let shownCoins: number | null = null;
-function Hud({ data, phase }: { data: SaveData; phase: ReturnType<typeof dayPhase> }) {
+/** 마지막으로 HUD에 보인 코인(전투 뒤 월드를 새로 그려도 +N을 보여 주려고 모듈에 둔다). 다른 저장(계정)이면 새로 잰다 */
+let shownCoins: { name: string; coins: number } | null = null;
+function Hud({ data, phase, onDex }: { data: SaveData; phase: ReturnType<typeof dayPhase>; onDex(): void }) {
   const lead = data.team[0];
   const [gain, setGain] = useState<{ n: number; key: number } | null>(null);
   useEffect(() => {
-    const diff = shownCoins === null ? 0 : data.coins - shownCoins;
-    shownCoins = data.coins;
+    const diff = shownCoins === null || shownCoins.name !== data.name ? 0 : data.coins - shownCoins.coins;
+    shownCoins = { name: data.name, coins: data.coins };
     if (diff <= 0) return;
     setGain({ n: diff, key: Date.now() });
     sfx('coin');
@@ -693,6 +721,11 @@ function Hud({ data, phase }: { data: SaveData; phase: ReturnType<typeof dayPhas
         <span className="gv-coin" aria-hidden />{data.coins.toLocaleString('ko-KR')}
         {gain && <em className="gv-gain">+{gain.n.toLocaleString('ko-KR')}</em>}
       </div>
+      {lead && (
+        <button type="button" className="gv-chip gv-dex" data-nosfx aria-label={`도감 ${data.dex.caught.length}종 잡음 · 열기`} onPointerDown={(e) => e.stopPropagation()} onClick={onDex}>
+          <span aria-hidden>▤</span>{data.dex.caught.length}
+        </button>
+      )}
       <div className="gv-chip gv-time" title={PHASE_NAME[phase]} aria-label={PHASE_NAME[phase]}>{PHASE_ICON[phase]}</div>
     </div>
   );

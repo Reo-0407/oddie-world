@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { speciesById } from '../data/index.ts';
 import type { SaveData } from '../game/save.ts';
 import { DexOverlay } from './DexOverlay.tsx';
@@ -37,11 +37,15 @@ const ITEMS: { id: Exclude<Panel, 'main'> | 'online'; label: string; icon: strin
 export function GameMenu({ data, actions, onData, onClose, start }: {
   data: SaveData; actions: MenuActions; onData(next: SaveData): void; onClose(): void;
   /** 처음 열 창(퀘스트 게시판에서 열 때) */
-  start?: 'quest';
+  start?: 'quest' | 'dex';
 }) {
   const [panel, setPanel] = useState<Panel>(start ?? 'main');
   const [picked, setPicked] = useState<number | null>(null);
-  if (panel === 'dex') return <DexOverlay dex={data.dex} onClose={() => setPanel('main')} />;
+  const boxRef = useRef<HTMLDivElement>(null);
+  // 창을 바꾸면 맨 위부터(가로 폰에서 앞 창의 스크롤이 남지 않게)
+  useEffect(() => { boxRef.current?.scrollTo?.(0, 0); }, [panel]);
+  // HUD에서 바로 연 도감은 닫으면 메뉴도 닫는다
+  if (panel === 'dex') return <DexOverlay dex={data.dex} onClose={start === 'dex' ? onClose : () => setPanel('main')} />;
 
   const back = <button type="button" className="wide" onClick={() => setPanel('main')}>뒤로</button>;
   let body;
@@ -146,9 +150,9 @@ export function GameMenu({ data, actions, onData, onClose, start }: {
     body = (
       <>
         <h2>처음부터 할까요?</h2>
-        <p className="note">지금까지의 오디, 코인, 도감이 모두 사라지고 되돌릴 수 없어요.</p>
-        <button type="button" className="wide gm-danger" onClick={() => { onClose(); actions.onRestart(); }}>네, 처음부터</button>
-        {back}
+        <p className="note">지금까지의 오디 {data.team.length + data.box.length}마리, 코인 {data.coins}, 도감, 배지가 <b>모두 사라지고 되돌릴 수 없어요.</b></p>
+        <button type="button" className="wide" onClick={() => setPanel('main')}>아니요, 계속할래요</button>
+        <button type="button" className="wide gm-danger" onClick={() => { onClose(); actions.onRestart(); }}>네, 모두 지우고 처음부터</button>
       </>
     );
   } else {
@@ -167,7 +171,7 @@ export function GameMenu({ data, actions, onData, onClose, start }: {
     );
   }
   return (
-    <div className="gm" role="dialog" aria-label="메뉴" onPointerDown={(e) => e.stopPropagation()}>
+    <div ref={boxRef} className="gm" role="dialog" aria-label="메뉴" onPointerDown={(e) => e.stopPropagation()}>
       <SoundToggle className="corner" />
       <div key={panel} className="gm-body">{body}</div>
       <button type="button" className="gm-close" aria-label="닫기" data-nosfx onClick={onClose}>✕</button>

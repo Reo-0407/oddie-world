@@ -11,12 +11,12 @@ import { playMusic, sfx } from './audio/audio.ts';
 import type { TrackId } from './audio/tracks.ts';
 import { markSeen } from './game/dex.ts';
 import { newSave, START_LEVEL, type SaveData } from './game/save.ts';
-import { questsAfter, settleCatch, settleLoss, settleWin } from './battle/outcome.ts';
+import { questsAfter, settleCatch, settleLoss, settleTrainer, settleWin } from './battle/outcome.ts';
 import { nextCombo } from './game/fun.ts';
 import { setHourOverride } from './game/daytime.ts';
 import { speciesById } from './data/index.ts';
 import type { RtResult } from './battle/realtime.ts';
-import { BADGE_NAMES, BADGE_ORDER, trainerById, type Trainer } from './overworld/encounters.ts';
+import { BADGE_ORDER, trainerById, type Trainer } from './overworld/encounters.ts';
 import { getMap } from './overworld/maps/index.ts';
 import type { Status } from './engine/types.ts';
 import type { RegionId } from './overworld/regions.ts';
@@ -81,12 +81,14 @@ export default function App() {
     setWorldKey((k) => k + 1);
   });
 
-  const onEncounter = (info: EncounterInfo) => {
+  /** 전투를 시작했으면 true(false면 월드가 다시 움직인다) */
+  const onEncounter = (info: EncounterInfo): boolean => {
     const d = dataRef.current;
-    if (!d || d.team.length === 0 || wiping.current) return; // 스타터가 없으면 조우도 없다
+    if (!d || d.team.length === 0 || wiping.current) return false; // 스타터가 없으면 조우도 없다
     save({ ...d, dex: markSeen(d.dex, info.speciesId) });
     const foe: Foe = { speciesId: info.speciesId, level: info.level, ...(info.shiny ? { shiny: true } : {}), ...(info.strong ? { strong: true } : {}) };
     transition('wild', () => setFight({ stage: 'fight', kind: 'wild', region: info.region, foe }));
+    return true;
   };
 
   // 개발 중 콘솔에서 전투·배지·순간이동을 바로 해 볼 수 있게 (배포 빌드에는 없다)
@@ -117,17 +119,19 @@ export default function App() {
     };
   }
 
-  const onTrainer = (id: string) => {
+  const onTrainer = (id: string): boolean => {
     const d = dataRef.current;
     const trainer = trainerById(id);
-    if (!d || !trainer || d.team.length === 0 || wiping.current) return;
+    if (!d || !trainer || d.team.length === 0 || wiping.current) return false;
     save({ ...d, dex: trainer.team.reduce((dex, m) => markSeen(dex, m.speciesId), d.dex) });
     transition('trainer', () => setFight({ stage: 'fight', kind: 'trainer', region: getMap(d.map)?.region ?? 'meadow', trainer }));
+    return true;
   };
 
+  // 전투·잡기 결과는 한 번만 정산한다(두 번 눌러도 경험치·코인이 두 번 들어오지 않게). 화면을 덮는 중이면 이미 정산했다
   const onBattleEnd = (result: RtResult, alive: boolean[], foeStatus: Status | null, potionsLeft: number) => {
     const cur = dataRef.current;
-    if (!cur || !fight || fight.stage !== 'fight') return;
+    if (!cur || !fight || fight.stage !== 'fight' || wiping.current) return;
     const d = { ...cur, potions: potionsLeft }; // 전투 중 쓴 회복약
     if (result === 'fled') { save(d); return backToWorld(null); }
     if (result === 'escaped' && fight.kind === 'wild') {
@@ -141,20 +145,10 @@ export default function App() {
     }
     if (fight.kind === 'trainer') {
       const tr = fight.trainer;
-      const s = settleWin(d, alive, tr.team, tr);
-      const q = questsAfter(s.save, { kind: 'beatTrainer' });
-      const pages = [tr.lines.after, ...s.lines, ...q.lines];
-      let next = q.save;
-      if (tr.badge && !next.badges.includes(tr.badge)) {
-        next = { ...next, badges: [...next.badges, tr.badge] };
-        pages.push(`${BADGE_NAMES[tr.badge]}를 받았다!`);
-      }
-      if (tr.champion && !next.flags.includes('champion')) {
-        next = { ...next, flags: [...next.flags, 'champion'] };
-        setCredits(true);
-      }
-      save(next);
-      return backToWorld({ speaker: tr.name, pages });
+      const s = settleTrainer(d, alive, tr);
+      save(s.save);
+      if (s.champion) setCredits(true);
+      return backToWorld({ speaker: tr.name, pages: s.lines });
     }
     const won = settleWin(d, alive, [fight.foe]);
     const s = questsAfter(won.save, { kind: 'winWild' });
@@ -172,7 +166,7 @@ export default function App() {
 
   const onCatchEnd = (caught: boolean, ropes: SaveData['ropes'], excellent = 0) => {
     const d = dataRef.current;
-    if (!d || !fight || fight.stage !== 'catch') return;
+    if (!d || !fight || fight.stage !== 'catch' || wiping.current) return;
     const ex = excellent > 0 ? questsAfter({ ...d, ropes }, { kind: 'excellent', n: excellent }) : { save: { ...d, ropes }, lines: [] };
     if (caught) {
       const s = settleCatch(ex.save, fight.foe, ropes);
@@ -289,6 +283,7 @@ export default function App() {
           {wipe.kind === 'trainer' && <b />}
         </div>
       )}
+      {flow.cloudNote && <CloudToast key={flow.cloudNote.key} text={flow.cloudNote.text} />}
       {flow.conflict && (
         <ConflictDialog
           local={flow.conflict.local}
@@ -299,4 +294,11 @@ export default function App() {
       )}
     </>
   );
+}
+
+/** 클라우드 저장 결과를 잠깐 보여 주고 사라진다 */
+function CloudToast({ text }: { text: string }) {
+  const [on, setOn] = useState(true);
+  useEffect(() => { const id = window.setTimeout(() => setOn(false), 1800); return () => window.clearTimeout(id); }, []);
+  return on ? <div className="cloud-toast" role="status">{text}</div> : null;
 }

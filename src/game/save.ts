@@ -1,4 +1,4 @@
-import { cleanDex, dexFromOwned, emptyDex, type Dex } from './dex.ts';
+import { cleanDex, dexFromOwned, emptyDex, markCaught, type Dex } from './dex.ts';
 import { MAX_TEAM, type OwnedOddie } from './owned.ts';
 import { parseQuests, type QuestState } from './quests.ts';
 import type { Combo } from './fun.ts';
@@ -12,6 +12,8 @@ export const START_LEVEL = 5;
 /** 새 저장의 시작 코인 (옛 저장을 옮길 때는 적용하지 않는다) */
 export const START_COINS = 100;
 export const START_ROPES = { basic: 5, sturdy: 1 };
+/** 박사가 스타터와 함께 주는 로프 */
+export const LAB_ROPES = 5;
 
 export interface Ropes {
   basic: number;
@@ -79,6 +81,15 @@ export function newSave(name: string, characterIndex: number): SaveData {
     tutorialDone: false, dex: emptyDex(),
     map: TOWN_START.map, x: TOWN_START.x, y: TOWN_START.y, facing: TOWN_START.facing,
     badges: [], beaten: [], flags: [], respawn: { ...TOWN_RESPAWN },
+  };
+}
+
+/** 박사에게 첫 오디를 받는다. 이미 팀이 있으면 null(두 번 눌러도 한 마리만) */
+export function takeStarter(d: SaveData, speciesId: number): SaveData | null {
+  if (d.team.length > 0) return null;
+  return {
+    ...d, team: [{ speciesId, level: START_LEVEL, exp: 0 }], playerLevel: START_LEVEL, dex: markCaught(d.dex, speciesId),
+    ropes: { ...d.ropes, basic: d.ropes.basic + LAB_ROPES }, flags: d.flags.includes('starter') ? d.flags : [...d.flags, 'starter'],
   };
 }
 

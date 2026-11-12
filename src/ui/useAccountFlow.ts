@@ -12,6 +12,9 @@ const RETRY_MS = 20_000; // 올리기에 실패하면 다시 시도하는 간격
 
 export type Phase = 'booting' | 'auth' | 'ready';
 
+/** 클라우드 저장 결과를 잠깐 알리는 작은 표시 */
+export type CloudNote = { text: string; key: number } | null;
+
 export interface Conflict {
   local: SaveSide;
   cloud: SaveSide;
@@ -41,11 +44,15 @@ export function useAccountFlow() {
   const [data, setData] = useState<SaveData | null>(() => loadSave());
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const [authCancelable, setAuthCancelable] = useState(false);
+  const [cloudNote, setCloudNote] = useState<CloudNote>(null);
 
   const accountRef = useRef<Account | null>(null);
   const pending = useRef<SaveData | null>(null); // 아직 클라우드에 못 올린 최신 저장
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const uploading = useRef(false);
+  /** 로그인할 때 계정 저장을 못 읽었고 기기 저장도 없었다: 계정 저장을 확인하기 전에는 올리지 않는다(새 게임이 덮어쓰지 않게) */
+  const unverified = useRef(false);
+  const offlineShown = useRef(false);
 
   const flush = useCallback(async () => {
     clearTimeout(timer.current);
@@ -53,12 +60,29 @@ export function useAccountFlow() {
     const next = pending.current;
     if (!current || !next || uploading.current) return;
     uploading.current = true;
-    const ok = await uploadCloudSave(current.id, next);
+    if (unverified.current) {
+      const fetched = await fetchCloudSave(current.id);
+      if (accountRef.current !== current) { uploading.current = false; return; }
+      if (fetched.kind !== 'error') unverified.current = false;
+      if (fetched.kind === 'ok' && fetched.save && pending.current) {
+        // 계정에 이미 저장이 있었다: 덮어쓰지 말고 어느 쪽을 쓸지 묻는다
+        uploading.current = false;
+        setConflict({ local: { data: pending.current, at: Date.now() }, cloud: fetched.save, newer: 'cloud' });
+        pending.current = null;
+        return;
+      }
+    }
+    const ok = !unverified.current && await uploadCloudSave(current.id, next);
     uploading.current = false;
+    if (accountRef.current !== current) return; // 그사이 로그아웃했다
     if (ok) {
+      offlineShown.current = false;
+      setCloudNote({ text: '저장됨', key: Date.now() });
       if (pending.current === next) pending.current = null;
-      else void flush(); // 올리는 사이 또 바뀌었다
+      else if (pending.current) void flush(); // 올리는 사이 또 바뀌었다
     } else {
+      if (!offlineShown.current) setCloudNote({ text: '오프라인 — 기기에만 저장', key: Date.now() });
+      offlineShown.current = true;
       timer.current = setTimeout(() => { void flush(); }, RETRY_MS);
     }
   }, []);
@@ -82,8 +106,10 @@ export function useAccountFlow() {
     setOwner(who.id);
     setGuestFlag(false);
 
+    unverified.current = false;
     if (fetched.kind === 'error') {
-      // 인터넷 문제: 이 기기의 저장으로 계속하고 나중에 올린다
+      // 인터넷 문제: 이 기기의 저장으로 계속하고 나중에 올린다(기기 저장이 없으면 계정 저장을 확인한 뒤에)
+      unverified.current = !localData;
       setData(localData);
       if (localData) scheduleUpload(localData);
       return;
@@ -192,6 +218,7 @@ export function useAccountFlow() {
     clearLocalAccountData();
     setGuestFlag(false);
     pending.current = null;
+    unverified.current = false;
     clearTimeout(timer.current);
     accountRef.current = null;
     setAccount(null);
@@ -214,5 +241,5 @@ export function useAccountFlow() {
     setConflict(null);
   }, [scheduleUpload]);
 
-  return { phase, account, data, conflict, authCancelable, update, restart, login, signup, guest, openAuth, cancelAuth, logout, resolveConflict };
+  return { phase, account, data, conflict, authCancelable, cloudNote, update, restart, login, signup, guest, openAuth, cancelAuth, logout, resolveConflict };
 }

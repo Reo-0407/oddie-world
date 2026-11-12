@@ -5,8 +5,8 @@ import { highestLevel } from '../game/owned.ts';
 import { advanceQuests, questText, rewardText, type QuestCtx, type QuestEvent } from '../game/quests.ts';
 import { grantExp, settleBattle } from '../game/rewards.ts';
 import { START_LEVEL, type Ropes, type SaveData } from '../game/save.ts';
-import { STRONG_REWARD, TRAINERS } from '../overworld/encounters.ts';
-import { MAPS, getMap } from '../overworld/maps/index.ts';
+import { BADGE_NAMES, STRONG_REWARD, TRAINERS, type Trainer } from '../overworld/encounters.ts';
+import { MAPS, getMap, type HiddenItem } from '../overworld/maps/index.ts';
 import { itemFlag } from '../overworld/world.ts';
 
 /** 오프라인 전투가 끝난 뒤 저장을 고친다. 돌려주는 lines는 월드 대화 상자에 보여 줄 문구 */
@@ -84,6 +84,35 @@ export function settleLoss(save: SaveData): Settled {
     save: { ...save, coins: save.coins - lost, map: save.respawn.map, x: save.respawn.x, y: save.respawn.y, facing: 'down' },
     lines: ['눈앞이 깜깜해졌다…', lost > 0 ? `코인 ${lost}개를 잃었다. 오디들은 모두 회복했다.` : '오디들은 모두 회복했다.'],
   };
+}
+
+/** 트레이너를 이겼다: 경험치·보상, 퀘스트, 배지, 챔피언(처음 이기면 champion = true: 엔딩을 보여 준다) */
+export function settleTrainer(save: SaveData, alive: boolean[], tr: Trainer): Settled & { champion: boolean } {
+  const s = settleWin(save, alive, tr.team, tr);
+  const q = questsAfter(s.save, { kind: 'beatTrainer' });
+  const lines = [tr.lines.after, ...s.lines, ...q.lines];
+  let next = q.save;
+  if (tr.badge && !next.badges.includes(tr.badge)) {
+    next = { ...next, badges: [...next.badges, tr.badge] };
+    lines.push(`${BADGE_NAMES[tr.badge]}를 받았다!`);
+  }
+  const champion = !!tr.champion && !next.flags.includes('champion');
+  if (champion) next = { ...next, flags: [...next.flags, 'champion'] };
+  return { save: next, lines, champion };
+}
+
+const GIFT_NAME: Record<HiddenItem['gift'], string> = { rope: '로프', sturdy: '튼튼한 로프', potion: '회복약', coins: '코인' };
+
+/** 숨은 물건을 주웠다(이미 주운 것이면 그대로) */
+export function collectItem(save: SaveData, it: HiddenItem): Settled {
+  if (save.flags.includes(itemFlag(it.id))) return { save, lines: [] };
+  const next: SaveData = { ...save, flags: [...save.flags, itemFlag(it.id)] };
+  if (it.gift === 'rope') next.ropes = { ...save.ropes, basic: save.ropes.basic + it.n };
+  else if (it.gift === 'sturdy') next.ropes = { ...save.ropes, sturdy: save.ropes.sturdy + it.n };
+  else if (it.gift === 'potion') next.potions = save.potions + it.n;
+  else next.coins = save.coins + it.n;
+  const q = questsAfter(next, { kind: 'findItem' });
+  return { save: q.save, lines: [`반짝이는 곳에서 ${GIFT_NAME[it.gift]} ${it.n}개를 주웠다!`, ...q.lines] };
 }
 
 const ALL_ITEMS = Object.values(MAPS).flatMap((m) => m.items ?? []);

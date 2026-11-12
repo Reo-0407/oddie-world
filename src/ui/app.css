@@ -279,14 +279,15 @@ footer {
 }
 .gv-menu-btn span { position: absolute; left: 50%; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; background: #fafafa; border: 3px solid #23262b; }
 .gv-menu-btn:active { transform: translateX(-50%) scale(0.94); }
-.gm { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; background: rgba(250, 250, 250, 0.94); touch-action: pan-y; overflow-y: auto; }
-.gm-body { width: min(420px, 100%); display: flex; flex-direction: column; gap: 10px; }
+/* 내용이 화면보다 길면(가로 폰) 위가 잘리지 않게 margin: auto로 가운데 두고, 닫기 버튼은 아래에 붙어 따라온다 */
+.gm { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; align-items: center; padding: 16px 16px 14px; background: rgba(250, 250, 250, 0.94); touch-action: pan-y; overflow-y: auto; }
+.gm-body { margin: auto 0; width: min(420px, 100%); display: flex; flex-direction: column; gap: 10px; }
 .gm-body h2 { margin: 0; text-align: center; }
 .gm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px 8px; }
 .gm-item { display: flex; flex-direction: column; align-items: center; gap: 6px; border: 0; background: none; font-weight: 800; min-height: 48px; }
 .gm-icon { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 50%; color: #fff; font-size: 1.8rem; box-shadow: 0 4px 8px rgba(0,0,0,.3); border: 3px solid #fff; }
 .gm-item:active .gm-icon { transform: scale(0.94); }
-.gm-close { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); width: 64px; height: 64px; border-radius: 50%; border: 3px solid #23262b; background: #fff; font-size: 1.6rem; font-weight: 800; box-shadow: 0 4px 10px rgba(0,0,0,.3); }
+.gm-close { position: sticky; bottom: 0; flex-shrink: 0; margin-top: 12px; z-index: 1; width: 64px; min-height: 0; height: 64px; border-radius: 50%; border: 3px solid #23262b; background: #fff; font-size: 1.6rem; font-weight: 800; box-shadow: 0 4px 10px rgba(0,0,0,.3); }
 .gm-team { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .gm-mon { margin: 0; min-height: 0; color: inherit; font: inherit; display: flex; flex-direction: column; align-items: center; padding: 6px; border-radius: 12px; background: #fff; border: 2px solid #23262b; font-size: 0.85rem; }
 .gm-mon.on { background: #fff3c4; box-shadow: 0 0 0 3px #d94f3d; }
@@ -384,7 +385,7 @@ button { transition: transform 0.08s, box-shadow 0.08s; }
 @keyframes gm-in { from { opacity: 0; } }
 @keyframes gm-body { from { opacity: 0; transform: translateY(12px); } }
 @keyframes gm-pop { from { opacity: 0; transform: scale(0.3); } }
-@keyframes gm-close { from { transform: translateX(-50%) rotate(-90deg) scale(0.4); opacity: 0; } }
+@keyframes gm-close { from { transform: rotate(-90deg) scale(0.4); opacity: 0; } }
 .gm-body h2 { font-weight: 400; font-size: 1.5rem; }
 
 /* 팀 카드: 타입색 배경 + 경험치 막대 */
@@ -530,4 +531,22 @@ button { transition: transform 0.08s, box-shadow 0.08s; }
 }
 @media (prefers-reduced-motion: reduce) {
   .gv-coins.up, .gv-coins.up .gv-coin, .gv-gain, .fx-quest span { animation: none; }
+}
+
+/* ---------- 클라우드 저장 알림 ---------- */
+.cloud-toast {
+  position: fixed; top: calc(8px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right)); z-index: 30; pointer-events: none;
+  padding: 3px 10px; border-radius: 12px; background: rgba(20, 22, 28, 0.72); color: #fff; font-size: 0.75rem; font-weight: 700;
+  animation: cloud-toast 1.8s ease-out forwards;
+}
+@keyframes cloud-toast { 0% { opacity: 0; } 12%, 75% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cloud-toast { animation: none; } }
+.gv-hud .gv-dex { pointer-events: auto; min-height: 0; margin: 0; border: 0; padding: 0 10px 0 8px; font: inherit; font-size: 0.82rem; font-weight: 800; cursor: pointer; }
+.gv-dex span { font-size: 0.95rem; }
+
+/* 키가 낮은 화면(가로 폰): 메뉴 동그라미를 작게, 한 줄에 4개 */
+@media (max-height: 500px) {
+  .gm-grid { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .gm-icon { width: 52px; height: 52px; font-size: 1.3rem; }
+  .gm-close { width: 52px; height: 52px; font-size: 1.3rem; }
 }
