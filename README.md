@@ -27,7 +27,7 @@ npm run dev      # http://localhost:5173/oddie-world/ (같은 와이파이 폰�
 npm test         # 테스트
 npm run build    # dist/ 에 빌드
 ```
-친구 대전과 계정 저장은 Supabase를 씁니다(공개 주소·키는 `src/online/supabaseConfig.ts`). 로그인하지 않으면 게스트로 이 기기에만 저장됩니다.
+친구 대전과 계정 저장은 Supabase를 씁니다(공개 주소·키는 `src/online/supabaseConfig.ts`). 아이디와 숫자 4자리(PIN)로 가입·로그인하며, 저장은 계정(클라우드)과 이 기기에 함께 남습니다.
 
 ## 배포
 `main`에 push하면 GitHub Actions(`.github/workflows/deploy.yml`)가 테스트·빌드 후 GitHub Pages에 올립니다.
