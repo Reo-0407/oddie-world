@@ -26,6 +26,8 @@ interface Props {
   combo?: number;
   /** 지금 팀(잡으면 깡충 뛰어 들어가는 모습) */
   team?: { speciesId: number; shiny?: boolean }[];
+  /** 레이드: 황금 로프 개수(이것만 던지고, 놓쳐도 도망가지 않는다) */
+  golden?: number;
 }
 
 type Phase = 'aim' | 'fly' | 'shake' | 'done';
@@ -34,10 +36,12 @@ const FLY_MS = 650;
 const SHAKE_MS = 650;
 
 /** 포켓몬 고식 잡기: 줄어들었다 커지는 원, 아래 로프를 위로 휙 쓸어 던진다(키보드: 스페이스 누르고 떼기) */
-export function CatchScreen({ speciesId, level, region, status, ropes: startRopes, onEnd, shiny = false, isNew = false, combo = 1, team = [] }: Props) {
+export function CatchScreen({ speciesId, level, region, status, ropes: startRopes, onEnd, shiny = false, isNew = false, combo = 1, team = [], golden }: Props) {
   const species = speciesById(speciesId);
-  const [ropes, setRopes] = useState(startRopes);
-  const [kind, setKind] = useState<RopeKind>(startRopes.basic > 0 ? 'basic' : 'sturdy');
+  const raid = golden !== undefined;
+  const [ropes, setRopes] = useState<Record<RopeKind, number>>({ ...startRopes, golden: golden ?? 0 });
+  const [kind, setKind] = useState<RopeKind>(raid ? 'golden' : startRopes.basic > 0 ? 'basic' : 'sturdy');
+  const kinds: RopeKind[] = raid ? ['golden'] : ['basic', 'sturdy'];
   const [phase, setPhase] = useState<Phase>('aim');
   const [msg, setMsg] = useState<string | null>(null);
   const [shake, setShake] = useState(0);
@@ -51,7 +55,8 @@ export function CatchScreen({ speciesId, level, region, status, ropes: startRope
   const excellent = useRef(0);
   const [caughtFx, setCaughtFx] = useState(false);
   const endRef = useRef((caught: boolean, left: Ropes) => onEnd(caught, left, excellent.current));
-  endRef.current = (caught: boolean, left: Ropes) => onEnd(caught, left, excellent.current);
+  // 황금 로프는 저장에 없다: 가방의 로프만 돌려준다
+  endRef.current = (caught: boolean, left: Ropes) => onEnd(caught, { basic: left.basic, sturdy: left.sturdy }, excellent.current);
   const timers = useRef<number[]>([]);
   const later = (fn: () => void, ms: number) => { timers.current.push(window.setTimeout(fn, ms)); };
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
@@ -70,7 +75,7 @@ export function CatchScreen({ speciesId, level, region, status, ropes: startRope
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  const finish = (caught: boolean, left: Ropes, text: string) => {
+  const finish = (caught: boolean, left: Record<RopeKind, number>, text: string) => {
     setPhase('done');
     setMsg(text);
     if (caught) setCaughtFx(true);
@@ -83,7 +88,7 @@ export function CatchScreen({ speciesId, level, region, status, ropes: startRope
     const ring = ringScale(timeRef.current);
     const left = { ...s.ropes, [s.kind]: s.ropes[s.kind] - 1 };
     setRopes(left);
-    const out: ThrowOutcome = resolveThrow(species.rarity, status, s.kind, aim, ring);
+    const out: ThrowOutcome = resolveThrow(species.rarity, status, s.kind, aim, ring, Math.random, !raid);
     setPhase('fly');
     setMsg(null);
     sfx('whoosh');
@@ -102,8 +107,8 @@ export function CatchScreen({ speciesId, level, region, status, ropes: startRope
       ], { duration: FLY_MS, easing: 'ease-out', fill: 'forwards' });
     }
 
-    const nextOrEnd = (left2: Ropes, text: string) => {
-      if (left2.basic + left2.sturdy <= 0) return finish(false, left2, `${text} 로프가 다 떨어졌다…`);
+    const nextOrEnd = (left2: Record<RopeKind, number>, text: string) => {
+      if (kinds.every((k) => left2[k] <= 0)) return finish(false, left2, raid ? `${text} 황금 로프가 다 떨어졌다… 보스가 사라졌다.` : `${text} 로프가 다 떨어졌다…`);
       if (left2[st.current.kind] <= 0) setKind(st.current.kind === 'basic' ? 'sturdy' : 'basic');
       setMsg(text);
       rope?.getAnimations().forEach((a) => a.cancel());
@@ -220,7 +225,7 @@ export function CatchScreen({ speciesId, level, region, status, ropes: startRope
         </div>
       </div>
       <div className="catch-ropes">
-        {(['basic', 'sturdy'] as const).map((k) => (
+        {kinds.map((k) => (
           <button
             key={k} type="button" className={kind === k ? 'on' : ''} disabled={ropes[k] <= 0 || phase !== 'aim'}
             onClick={() => setKind(k)}

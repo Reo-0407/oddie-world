@@ -141,3 +141,13 @@
   .rt:not(.catch) .rt-tools { left: auto; right: 8px; top: 100px; width: 150px; flex-direction: column; align-items: stretch; gap: 6px; }
   .rt:not(.catch) .rt-tools button { min-height: 40px; }
 }
+
+/* 레이드 보스: 1.6배로 크게, 보랏빛 기운 */
+.rt-foe.raid { transform: translate(-50%, -42%) scale(1.6); }
+.rt-foe.raid::before { content: ''; position: absolute; inset: -6%; border-radius: 50%; background: radial-gradient(circle, rgba(190,90,255,.55), rgba(255,210,74,.25) 45%, transparent 68%); animation: rt-aura 0.9s ease-in-out infinite alternate; }
+.rt-foe.raid .rt-pop { scale: 0.65; }
+.rt-timer { margin-left: auto; padding: 2px 12px; border-radius: 12px; background: #23262b; color: #fff; font-weight: 900; font-variant-numeric: tabular-nums; }
+.rt-timer.low { background: #ef3b2c; animation: rt-aura 0.5s ease-in-out infinite alternate; }
+.catch-rope.golden { border-color: #d8a520; background: #ffe680; box-shadow: 0 4px 0 #8a6510, 0 0 18px #ffd24a; }
+@media (max-height: 500px) and (orientation: landscape) { .rt-foe.raid { transform: translate(-50%, -45%) scale(1.15); } }
+@media (prefers-reduced-motion: reduce) { .rt-foe.raid::before, .rt-timer.low { animation: none; } }

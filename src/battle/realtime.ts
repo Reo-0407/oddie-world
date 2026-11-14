@@ -109,6 +109,18 @@ export interface RtState {
   pressure: number;
   /** 이번 tick에 일어난 일(화면 연출용) */
   events: RtEvent[];
+  /** 제한 시간이 있으면 남은 ms(레이드). 0이 되면 진다 */
+  timeLeft?: number;
+  /** 내 교체 쿨타임(기본 3초, 레이드는 0.5초) */
+  switchMs: number;
+}
+
+export interface RtOptions {
+  /** 상대 체력 배율(레이드 보스 5배) */
+  foeHp?: number;
+  /** 제한 시간(ms) */
+  timeMs?: number;
+  switchMs?: number;
 }
 
 export interface RtInput {
@@ -128,8 +140,10 @@ export function energyCost(move: Move): number {
   return Math.min(80, Math.max(35, Math.round((move.power * 0.6) / 5) * 5));
 }
 
-export function makeFighter(speciesId: number, level: number): Fighter {
+/** moveLevel: 이 레벨까지 배운 기술 중에서 고른다(능력치는 level 그대로) */
+export function makeFighter(speciesId: number, level: number, moveLevel = level): Fighter {
   const mon = createBattlePokemon(speciesById(speciesId), level, MOVES);
+  if (moveLevel > level) mon.moves = createBattlePokemon(speciesById(speciesId), moveLevel, MOVES).moves;
   const moves = damaging(mon.moves);
   // 기본 공격은 가장 약한 자기 타입 기술(없으면 가장 약한 기술): 다들 박치기만 쓰지 않게
   const stab = moves.filter((m) => mon.types.includes(m.type));
@@ -208,16 +222,25 @@ export function bestCounter(foes: Fighter[], mine: Fighter, except = -1): number
 }
 
 export function createRealtime(
-  kind: RtKind, team: { speciesId: number; level: number }[], foes: { speciesId: number; level: number }[], potions = 0,
-  ai: AiTier = kind === 'wild' ? 'wild' : 'trainer',
+  kind: RtKind, team: { speciesId: number; level: number }[], foes: { speciesId: number; level: number; moveLevel?: number }[], potions = 0,
+  ai: AiTier = kind === 'wild' ? 'wild' : 'trainer', opts: RtOptions = {},
 ): RtState {
   const me = team.map((o) => makeFighter(o.speciesId, o.level));
-  const foe = foes.map((o) => ({ ...makeFighter(o.speciesId, o.level), energy: kind === 'trainer' ? TRAINER_START_ENERGY : WILD_START_ENERGY }));
-  return {
+  const foe = foes.map((o) => {
+    const f = { ...makeFighter(o.speciesId, o.level, o.moveLevel), energy: kind === 'trainer' ? TRAINER_START_ENERGY : WILD_START_ENERGY };
+    if (opts.foeHp && opts.foeHp > 1) {
+      const hp = Math.round(f.mon.stats.hp * opts.foeHp);
+      f.mon = { ...f.mon, hp, stats: { ...f.mon.stats, hp } };
+    }
+    return f;
+  });
+  const s: RtState = {
     kind, me, foe, myActive: 0, foeActive: 0, fastCd: 0, switchCd: 0, dodgeMs: 0, potions, potionCd: 0,
     foeNextMs: foeInterval(me[0].mon, foe[0].mon), telegraph: null, result: null, events: [],
-    ai, foeSwitchCd: 5000, foePotionUsed: false, pressure: 0,
+    ai, foeSwitchCd: 5000, foePotionUsed: false, pressure: 0, switchMs: opts.switchMs ?? SWITCH_COOLDOWN_MS,
   };
+  if (opts.timeMs) s.timeLeft = opts.timeMs;
+  return s;
 }
 
 const clone = (s: RtState): RtState => ({
@@ -395,7 +418,15 @@ export function tick(state: RtState, dtMs: number, input: RtInput, rng: Rng): Rt
   s.foeSwitchCd = Math.max(0, s.foeSwitchCd - dt);
   s.pressure = Math.max(0, s.pressure - dt / 5000);
 
-  if (input.run && s.kind === 'wild') {
+  if (s.timeLeft !== undefined) {
+    s.timeLeft = Math.max(0, s.timeLeft - dt);
+    if (s.timeLeft === 0) {
+      s.result = 'lost';
+      s.events.push({ t: 'end', result: 'lost' });
+      return s;
+    }
+  }
+  if (input.run && (s.kind === 'wild' || s.timeLeft !== undefined)) {
     s.result = 'fled';
     s.events.push({ t: 'end', result: 'fled' });
     return s;
@@ -405,7 +436,7 @@ export function tick(state: RtState, dtMs: number, input: RtInput, rng: Rng): Rt
   const sw = input.switchTo;
   if (sw !== undefined && sw !== s.myActive && s.switchCd === 0 && (s.me[sw]?.mon.hp ?? 0) > 0) {
     s.myActive = sw;
-    s.switchCd = SWITCH_COOLDOWN_MS;
+    s.switchCd = s.switchMs;
     s.fastCd = FAST_COOLDOWN_MS;
     s.events.push({ t: 'send', side: 'me', name: s.me[sw].mon.name });
   }

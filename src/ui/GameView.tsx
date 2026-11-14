@@ -22,9 +22,15 @@ import { levelTag, NURSE_ROPES, nurseGivesRopes } from '../game/fun.ts';
 import { fillQuests } from '../game/quests.ts';
 import { expToNext, MAX_LEVEL } from '../game/growth.ts';
 import { collectItem, questCtx } from '../battle/outcome.ts';
+import { dailyDue, localDay, shinyBoost } from '../game/daily.ts';
+import { canRematch, isoWeek, raidBoss, raidOpen, REMATCH_PREFIX } from '../game/postgame.ts';
+import { TRAINERS } from '../overworld/encounters.ts';
+import { biteDelay, CAST_MS, fishSpot, HOOK_MS, reel, ROD_FLAG } from '../overworld/fishing.ts';
+import { DailyPanel, RaidPanel } from './PostgamePanels.tsx';
 import { OddieArt } from './OddieArt.tsx';
 
-export interface EncounterInfo { speciesId: number; level: number; region: RegionId; shiny?: boolean; strong?: boolean }
+/** fished: 낚시로 걸었다(퀘스트) */
+export interface EncounterInfo { speciesId: number; level: number; region: RegionId; shiny?: boolean; strong?: boolean; fished?: boolean }
 
 interface Props {
   data: SaveData;
@@ -32,6 +38,8 @@ interface Props {
   /** 전투를 시작하면 true. false면 월드가 다시 움직인다(갇히지 않게) */
   onEncounter(info: EncounterInfo): boolean;
   onTrainer(npcId: string): boolean;
+  /** 레이드 시작(팀 번호 최대 3, 보스) */
+  onRaid(picks: number[], boss: { speciesId: number; level: number }): boolean;
   /** 처음 그릴 때 보여 줄 대화(전투 결과 등) */
   message?: { speaker?: string; pages: string[] } | null;
   /** 둥근 메뉴 버튼 안의 항목들 */
@@ -77,7 +85,7 @@ const RUN_SPEED = 1.6;
 const RUN_HOLD_MS = 450;
 
 /** 위에서 내려다보는 2D 월드: 캔버스 + 키보드/터치 조작 + 대화 상자 */
-export function GameView({ data, onData, onEncounter, onTrainer, message, menu }: Props) {
+export function GameView({ data, onData, onEncounter, onTrainer, onRaid, message, menu }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const control = useRef<DialogControl | null>(null);
@@ -88,7 +96,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
   const [dialog, setDialog] = useState<DialogSpec | null>(null);
   const [mapName, setMapName] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [overlay, setOverlay] = useState<null | 'shop' | 'starter'>(null);
+  const [overlay, setOverlay] = useState<null | 'shop' | 'starter' | 'daily' | 'raid'>(null);
   /** 메뉴를 열 때 바로 보여 줄 창(퀘스트 게시판) */
   const [menuStart, setMenuStart] = useState<'quest' | 'dex' | undefined>(undefined);
   const [phase, setPhase] = useState(() => dayPhase(nowHour()));
@@ -101,6 +109,8 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
     press(d: Dir, pad?: boolean): void; release(d: Dir): void; a(): void; say(pages: string[], speaker?: string): void;
     /** 메뉴 열기: 걷는 중·전투로 넘어가는 중이면 멈춘 뒤에 연다 */
     menu(start?: 'dex'): void;
+    /** 전투로 넘어가는 중: 더 걷지 않는다 */
+    lock(on: boolean): void;
   } | null>(null);
 
   useEffect(() => {
@@ -142,17 +152,21 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       /** 이번 센터 방문에 무료 로프를 받았나 */
       ropeGiven: false,
       tint: skyTint(nowHour()) as Tint,
-      tintAt: 0,
+      tintAt: 600,
       /** 열어 달라고 한 메뉴(멈추면 연다) */
       wantMenu: null as null | 'main' | 'dex',
       /** 달리기 키를 누르고 있나, 십자키를 누르기 시작한 시각(-1 = 안 누름) */
       runKey: false,
       padAt: -1,
+      /** 낚시 중: 찌 칸, 지난 시간, 입질 시각 */
+      fish: null as null | { x: number; y: number; t: number; biteAt: number; bit: boolean },
+      /** 매일 보상 창을 이미 띄웠나 */
+      dailyShown: false,
     };
     /** 지금 시각·선두·연속 잡기로 야생 오디를 굴린다 */
     const roll = () => {
       const d = dataRef.current;
-      return rollWild(map.region, Math.random, { lead: d.team[0]?.level ?? 5, phase: dayPhase(nowHour()), combo: d.combo?.count ?? 0 });
+      return rollWild(map.region, Math.random, { lead: d.team[0]?.level ?? 5, phase: dayPhase(nowHour()), combo: d.combo?.count ?? 0, shinyMult: shinyBoost(d, localDay()) });
     };
 
     const persist = () => {
@@ -301,6 +315,15 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       n.facing = OPPOSITE[player.facing];
       const beaten = dataRef.current.beaten.includes(n.id);
       if (n.trainer) {
+        if (beaten && canRematch(dataRef.current, n.id, localDay())) {
+          return openDialog({
+            speaker: n.name, pages: [...n.trainer.after, '챔피언이 됐다고? 그럼 진짜 실력으로 한 판 더! (하루 한 번, 레벨 +12)'], choices: ['다시 승부!', '다음에'],
+            after: finish((c) => { if (c === 0) { rt.triggered.add(n.id); fightTrainer(REMATCH_PREFIX + n.id); } }),
+          });
+        }
+        if (beaten && TRAINERS[n.id]?.badge && dataRef.current.flags.includes('champion')) {
+          return openDialog({ speaker: n.name, pages: [...n.trainer.after, '오늘은 이미 붙었지? 내일 또 오렴!'] });
+        }
         if (beaten) return openDialog({ speaker: n.name, pages: n.trainer.after });
         return openDialog({ speaker: n.name, pages: n.trainer.before, after: finish(() => { rt.triggered.add(n.id); fightTrainer(n.id); }) });
       }
@@ -332,6 +355,31 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       if (n.role === 'quest') {
         return openDialog({ speaker: n.name, pages: lines, after: finish(() => { rt.held = []; setMenuStart('quest'); setMenuOpen(true); }) });
       }
+      if (n.role === 'fisher' && !p.flags.includes(ROD_FLAG)) {
+        return openDialog({
+          speaker: n.name, pages: lines,
+          after: finish(() => {
+            const d = dataRef.current;
+            if (!d.flags.includes(ROD_FLAG)) setData({ ...d, flags: [...d.flags, ROD_FLAG] });
+            jingle('catch');
+            renderer.emit('sparkle', player.x * TILE, player.y * TILE - 8);
+            openDialog({ pages: ['낚싯대를 받았다!', '물가를 바라보고 A(화면 탭)로 던지고, "!"가 뜨면 바로 탭!'] });
+          }),
+        });
+      }
+      if (n.role === 'raid') {
+        const d = dataRef.current;
+        const week = isoWeek(localDay());
+        const boss = raidBoss(week);
+        const name = speciesById(boss.speciesId).name;
+        if (!d.flags.includes('champion')) return openDialog({ speaker: n.name, pages: lines });
+        if (!raidOpen(d, week)) return openDialog({ speaker: n.name, pages: [`이번 주 보스 ${name}은(는) 이미 이겼구나! 대단해.`, '보스는 매주 월요일에 바뀐단다.'] });
+        return openDialog({
+          speaker: n.name, pages: [`이번 주 레이드 보스는 전설의 ${name}(Lv.${boss.level})!`, '체력이 다섯 배야. 오디 세 마리까지 데려가 3분 안에 쓰러뜨려 봐.'],
+          choices: ['도전!', '다음에'],
+          after: finish((c) => { if (c === 0) { rt.held = []; setOverlay('raid'); } }),
+        });
+      }
       if (n.role === 'clerk') return openDialog({ speaker: n.name, pages: lines, after: finish(() => { rt.held = []; setOverlay('shop'); }) });
       if (n.role === 'professor' && !p.flags.includes('starter')) {
         return openDialog({ speaker: n.name, pages: lines, after: finish(() => { rt.held = []; setOverlay('starter'); }) });
@@ -343,10 +391,39 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       });
     };
 
-    const idle = () => !rt.locked && !rt.anim && !rt.fade && !rt.flash && !rt.heal && !rt.ev && !rt.dialogOpen && !menuRef.current;
+    const idle = () => !rt.locked && !rt.anim && !rt.fade && !rt.flash && !rt.heal && !rt.ev && !rt.dialogOpen && !menuRef.current && !rt.fish;
+
+    // ---------- 낚시 ----------
+    const stopFish = (pages?: string[]) => {
+      rt.fish = null;
+      if (pages) openDialog({ pages });
+    };
+    const reelIn = () => {
+      const f = rt.fish!;
+      if (f.t < CAST_MS) return; // 아직 던지는 중
+      const r = reel(f.biteAt, f.t);
+      if (r === 'early') { sfx('bump'); return stopFish(['너무 빨리 당겼다! 물속 오디가 놀라 달아났다…']); }
+      if (r === 'late') return stopFish(['늦었다… 오디가 미끼만 먹고 가 버렸다.']);
+      rt.fish = null;
+      sfx('ding');
+      renderer.emit('poof', f.x * TILE, f.y * TILE);
+      const d = dataRef.current;
+      const w = rollWild(map.region, Math.random, {
+        lead: d.team[0]?.level ?? 5, phase: dayPhase(nowHour()), combo: d.combo?.count ?? 0, shinyMult: shinyBoost(d, localDay()), water: true,
+      });
+      rt.held = [];
+      rt.flash = { t: 0, info: { speciesId: w.speciesId, level: w.level, region: map.region, shiny: w.shiny, strong: w.strong, fished: true } };
+    };
+    const updateFish = (dt: number) => {
+      const f = rt.fish!;
+      f.t += dt;
+      if (!f.bit && f.t >= f.biteAt) { f.bit = true; sfx('blip'); renderer.emit('poof', f.x * TILE, f.y * TILE); }
+      if (f.t > f.biteAt + HOOK_MS) stopFish(['늦었다… 오디가 미끼만 먹고 가 버렸다.']);
+    };
 
     const pressA = () => {
       if (rt.dialogOpen) return control.current?.press();
+      if (rt.fish && !menuRef.current) return reelIn();
       if (!idle()) return;
       const f = facingTile(player);
       const lead = dataRef.current.team[0];
@@ -359,7 +436,15 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       }
       if (pickItem(f.x, f.y)) return;
       const t = interactTarget(map, npcs, player);
-      if (!t) return;
+      if (!t) {
+        const spot = dataRef.current.team.length > 0 ? fishSpot(map, player, dataRef.current.flags) : null;
+        if (spot) {
+          rt.held = [];
+          rt.fish = { ...spot, t: 0, bit: false, biteAt: CAST_MS + biteDelay(Math.random) };
+          sfx('whoosh');
+        }
+        return;
+      }
       if (t.type === 'sign') openDialog({ pages: [t.sign.text] });
       else speak(npcs.find((n) => n.id === t.npc.id)!);
     };
@@ -488,6 +573,8 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         if (rt.anim && rt.anim.t >= (rt.anim.ms ?? STEP_MS) && !rt.flash) finishStep();
       } else if (rt.ev) {
         updateEvent(dt);
+      } else if (rt.fish && !rt.dialogOpen && !menuRef.current) {
+        updateFish(dt);
       } else if (!rt.dialogOpen && !menuRef.current && !rt.locked) {
         rt.cooldown = Math.max(0, rt.cooldown - dt);
         updateWild(dt);
@@ -539,10 +626,20 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
         const h = nowHour();
         rt.tint = skyTint(h);
         setPhase(dayPhase(h));
+        // 매일 보상: 그날 처음(자정을 넘겨도) 멈춰 있을 때 한 번 띄운다
+        const d = dataRef.current;
+        if (!rt.dailyShown && idle() && d.team.length > 0 && dailyDue(d.daily, localDay()) !== null) {
+          rt.dailyShown = true;
+          rt.held = [];
+          menuRef.current = true;
+          setOverlay('daily');
+        }
       }
+      const fish = rt.fish;
       renderer.draw({
         map, time: rt.time, fade: Math.min(1, fadeA), flash: flashA,
-        player: { ...pp, look, dir: player.facing, frame: moving },
+        player: { ...pp, look, dir: player.facing, frame: moving, bubble: !!fish?.bit },
+        fishing: fish ? { x: fish.x, y: fish.y, cast: fish.t / CAST_MS, bite: fish.bit } : null,
         npcs: npcs.map(actor), mons, follower,
         items: hiddenItems(map, dataRef.current.flags), tint: rt.tint,
       });
@@ -579,7 +676,10 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       setMenuStart(start === 'dex' ? 'dex' : undefined);
       setMenuOpen(true);
     }
-    api.current = { press, release, a: pressA, say: (pages, speaker) => openDialog({ speaker, pages }), menu: (start) => openMenu(start ?? 'main') };
+    api.current = {
+      press, release, a: pressA, say: (pages, speaker) => openDialog({ speaker, pages }), menu: (start) => openMenu(start ?? 'main'),
+      lock: (on) => { rt.locked = on; },
+    };
 
     const onKeyDown = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -589,6 +689,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       if (menuRef.current) {
         if (B_KEYS.has(e.code) && !e.repeat) {
           if (overlayRef.current === 'shop') { setOverlay(null); api.current?.say(['또 오세요!'], '점원'); }
+          else if (overlayRef.current === 'daily' || overlayRef.current === 'raid') setOverlay(null);
           else if (overlayRef.current === null) { sfx('menuClose'); setMenuOpen(false); }
         }
         return;
@@ -607,6 +708,7 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       } else if (B_KEYS.has(e.code)) {
         e.preventDefault();
         if (e.repeat || rt.dialogOpen) return;
+        if (rt.fish) { stopFish(); return; }
         // 걸으면서 누르면 달리기, 서서 누르면 메뉴
         if (rt.held.length > 0) rt.runKey = true;
         else openMenu('main');
@@ -673,6 +775,16 @@ export function GameView({ data, onData, onEncounter, onTrainer, message, menu }
       )}
       {overlay === 'shop' && (
         <ShopPanel data={data} onBuy={(next) => { dataRef.current = next; onData(next); }} onClose={() => { setOverlay(null); api.current?.say(['또 오세요!'], '점원'); }} />
+      )}
+      {overlay === 'daily' && (
+        <DailyPanel data={data} onClaim={(next) => { dataRef.current = next; onData(next); }} onClose={() => setOverlay(null)} />
+      )}
+      {overlay === 'raid' && (
+        <RaidPanel
+          data={data} boss={raidBoss(isoWeek(localDay()))}
+          onCancel={() => { setOverlay(null); api.current?.say(['준비되면 언제든 오렴!'], '레이드 안내원'); }}
+          onStart={(picks, boss) => { setOverlay(null); api.current?.lock(onRaid(picks, boss) !== false); }}
+        />
       )}
       {overlay === 'starter' && (
         <div className="gv-overlay" onPointerDown={(e) => e.stopPropagation()}>

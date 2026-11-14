@@ -58,7 +58,7 @@ export const desert: MapData = {
 };
 
 // ---------- 설원 마을 (남서) ----------
-// 북쪽 3번 길에서 내려오는 길, 위: 센터·상점·체육관(서로 띄움), 아래: 눈사람과 벤치가 있는 꽁꽁 언 호수
+// 북쪽 3번 길에서 내려오는 길, 위: 센터·상점·체육관(서로 띄움), 아래: 눈사람과 벤치가 있는 꽁꽁 언 호수(얼음 구멍 두 곳에서 낚시)
 const SNOW_ROWS = [
   'TTTTTTTTTT::TTTTTTTTTTTTTTTTTTTT',
   'TTTTTTTTT.::.TTTTTTTTTTTTTTTTTTT',
@@ -74,9 +74,9 @@ const SNOW_ROWS = [
   'T..Y.n....T......n.....T...n..TT',
   'Tn....S........S......nn.T....TT',
   'T..T...iiiiiii...n.....nn.....TT',
-  'T....iiiiiiiiiii..b........T..TT',
+  'T....iiiiiii~iii..b........T..TT',
   'Tn..iiiiiiiiiiiii.b....S.....TTT',
-  'Tnn.iiiiioiiiiiii...nnn....n..TT',
+  'Tnn.iiiii~iiiiiii...nnn....n..TT',
   'TT...iiiiiiiiiii.S.....T......TT',
   'Tn.....iiiiiii....nnn....S....TT',
   'TTT...n.........T....TT..n....TT',
@@ -164,6 +164,8 @@ export const volcano: MapData = {
     { id: 'gate-hall', name: '전당 문지기', x: 27, y: 11, facing: 'up', look: guard('#e0b030', '#8a5ac8'),
       lines: ['이 앞은 챔피언의 전당이다.', '초원·사막·설원·화산 배지 네 개가 모두 있어야 지나갈 수 있어.'],
       gate: { badges: ['meadow', 'desert', 'snow', 'volcano'], aside: { x: 26, y: 11 }, open: ['배지 네 개! 챔피언이 기다리고 있다. 행운을 빈다!'] } },
+    { id: 'raid-guide', name: '레이드 안내원', x: 16, y: 23, facing: 'right', look: look('#e8c040', '#d94f3d', '#2a2a3a', '#e0b030'), role: 'raid',
+      lines: ['이곳은 전당 앞마당. 매주 전설의 오디가 레이드 보스로 나타난단다.', '챔피언이 된 트레이너만 도전할 수 있어.'] },
   ],
   signs: [
     { x: 6, y: 8, text: '오디 센터 — 지친 오디를 쉬게 해 드립니다.' },

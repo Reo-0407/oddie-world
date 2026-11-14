@@ -1,16 +1,17 @@
 import type { Rarity } from '../data/types.ts';
 import type { Status } from '../engine/types.ts';
 
-export type RopeKind = 'basic' | 'sturdy';
+/** golden: 레이드에서만 주는 황금 로프(저장하지 않는다) */
+export type RopeKind = 'basic' | 'sturdy' | 'golden';
 
-export const ROPE_NAMES: Record<RopeKind, string> = { basic: '로프', sturdy: '튼튼한 로프' };
+export const ROPE_NAMES: Record<RopeKind, string> = { basic: '로프', sturdy: '튼튼한 로프', golden: '황금 로프' };
 
 /** 등급별 기본 포획률 */
 export const RARITY_CATCH_RATE: Record<Rarity, number> = {
   Common: 0.6, Rare: 0.45, Epic: 0.3, Legendary: 0.15, Secret: 0.08, '???': 0.04,
 };
 
-export const ROPE_MULTIPLIER: Record<RopeKind, number> = { basic: 1, sturdy: 1.8 };
+export const ROPE_MULTIPLIER: Record<RopeKind, number> = { basic: 1, sturdy: 1.8, golden: 2 };
 export const STATUS_MULTIPLIER = 1.3;
 export const MAX_CATCH_CHANCE = 0.95;
 

@@ -11,7 +11,9 @@ import { playMusic, sfx } from './audio/audio.ts';
 import type { TrackId } from './audio/tracks.ts';
 import { markSeen } from './game/dex.ts';
 import { newSave, START_LEVEL, type SaveData } from './game/save.ts';
-import { questsAfter, settleCatch, settleLoss, settleTrainer, settleWin } from './battle/outcome.ts';
+import { questsAfter, settleCatch, settleLoss, settleRaidWin, settleRematch, settleTrainer, settleWin } from './battle/outcome.ts';
+import { localDay, setDayOffset } from './game/daily.ts';
+import { RAID_ROPES, REMATCH_PREFIX, rematchTrainer } from './game/postgame.ts';
 import { nextCombo } from './game/fun.ts';
 import { setHourOverride } from './game/daytime.ts';
 import { speciesById } from './data/index.ts';
@@ -24,9 +26,13 @@ import './ui/app.css';
 
 type Foe = { speciesId: number; level: number; shiny?: boolean; strong?: boolean };
 type Fight =
-  | { stage: 'fight'; kind: 'wild'; region: RegionId; foe: Foe }
-  | { stage: 'fight'; kind: 'trainer'; region: RegionId; trainer: Trainer }
-  | { stage: 'catch'; region: RegionId; foe: Foe; status: Status | null; lines: string[]; isNew: boolean; combo: number };
+  /** pre: 전투 전에 생긴 문구(낚시 퀘스트 완료 등) */
+  | { stage: 'fight'; kind: 'wild'; region: RegionId; foe: Foe; pre: string[] }
+  | { stage: 'fight'; kind: 'trainer'; region: RegionId; trainer: Trainer; rematch?: boolean }
+  /** picks: 레이드에 데려간 팀 번호(최대 3) */
+  | { stage: 'fight'; kind: 'raid'; region: RegionId; foe: Foe; picks: number[] }
+  /** golden: 레이드 황금 로프 */
+  | { stage: 'catch'; region: RegionId; foe: Foe; status: Status | null; lines: string[]; isNew: boolean; combo: number; golden?: number };
 
 type Message = { speaker?: string; pages: string[] } | null;
 type Wipe = { kind: 'wild' | 'trainer' | 'fade'; phase: 'in' | 'out'; key: number };
@@ -85,9 +91,20 @@ export default function App() {
   const onEncounter = (info: EncounterInfo): boolean => {
     const d = dataRef.current;
     if (!d || d.team.length === 0 || wiping.current) return false; // 스타터가 없으면 조우도 없다
-    save({ ...d, dex: markSeen(d.dex, info.speciesId) });
+    // 낚았다: 낚시 퀘스트를 올린다(완료 문구는 전투가 끝난 뒤 보여 준다)
+    const q = info.fished ? questsAfter(d, { kind: 'fish' }) : { save: d, lines: [] };
+    save({ ...q.save, dex: markSeen(q.save.dex, info.speciesId) });
     const foe: Foe = { speciesId: info.speciesId, level: info.level, ...(info.shiny ? { shiny: true } : {}), ...(info.strong ? { strong: true } : {}) };
-    transition('wild', () => setFight({ stage: 'fight', kind: 'wild', region: info.region, foe }));
+    transition('wild', () => setFight({ stage: 'fight', kind: 'wild', region: info.region, foe, pre: q.lines }));
+    return true;
+  };
+
+  /** 레이드 시작: 고른 팀 번호(최대 3)와 이번 주 보스 */
+  const onRaid = (picks: number[], boss: { speciesId: number; level: number }): boolean => {
+    const d = dataRef.current;
+    if (!d || picks.length === 0 || wiping.current) return false;
+    save({ ...d, dex: markSeen(d.dex, boss.speciesId) });
+    transition('trainer', () => setFight({ stage: 'fight', kind: 'raid', region: getMap(d.map)?.region ?? 'volcano', foe: boss, picks }));
     return true;
   };
 
@@ -116,15 +133,25 @@ export default function App() {
       },
       /** 낮·밤 시험: __oddie.hour(22), 되돌리기 __oddie.hour(null) */
       hour(h: number | null) { setHourOverride(h); },
+      /** 매일 보상 시험: __oddie.day(1) = 내일, 되돌리기 __oddie.day(0) */
+      day(offset: number) { setDayOffset(offset); backToWorld(null); return localDay(); },
+      /** 플래그 켜기: __oddie.flag('champion'), __oddie.flag('rod') */
+      flag(f: string) {
+        const d = dataRef.current;
+        if (!d || d.flags.includes(f)) return;
+        save({ ...d, flags: [...d.flags, f] });
+        backToWorld(null);
+      },
     };
   }
 
   const onTrainer = (id: string): boolean => {
     const d = dataRef.current;
-    const trainer = trainerById(id);
+    const rematch = id.startsWith(REMATCH_PREFIX);
+    const trainer = rematch ? rematchTrainer(id.slice(REMATCH_PREFIX.length)) : trainerById(id);
     if (!d || !trainer || d.team.length === 0 || wiping.current) return false;
     save({ ...d, dex: trainer.team.reduce((dex, m) => markSeen(dex, m.speciesId), d.dex) });
-    transition('trainer', () => setFight({ stage: 'fight', kind: 'trainer', region: getMap(d.map)?.region ?? 'meadow', trainer }));
+    transition('trainer', () => setFight({ stage: 'fight', kind: 'trainer', region: getMap(d.map)?.region ?? 'meadow', trainer, rematch }));
     return true;
   };
 
@@ -133,10 +160,27 @@ export default function App() {
     const cur = dataRef.current;
     if (!cur || !fight || fight.stage !== 'fight' || wiping.current) return;
     const d = { ...cur, potions: potionsLeft }; // 전투 중 쓴 회복약
-    if (result === 'fled') { save(d); return backToWorld(null); }
+    if (fight.kind === 'raid') {
+      if (result !== 'won') {
+        save(d);
+        return backToWorld({ speaker: '레이드 안내원', pages: [result === 'fled' ? '레이드를 그만뒀다.' : '레이드 보스를 쓰러뜨리지 못했다…', '이번 주 안이라면 언제든 다시 도전할 수 있어요!'] });
+      }
+      const f = fight;
+      // 레이드 팀(최대 3)의 생존을 전체 팀 순서로
+      const full = d.team.map((_, i) => { const k = f.picks.indexOf(i); return k >= 0 && alive[k]; });
+      const s = settleRaidWin(d, full, f.foe, localDay());
+      save(s.save);
+      const isNew = !s.save.dex.caught.includes(f.foe.speciesId);
+      const combo = nextCombo(s.save.combo, f.foe.speciesId).count;
+      return transition('fade', () => setFight({
+        stage: 'catch', region: f.region, foe: f.foe, status: foeStatus, isNew, combo, golden: RAID_ROPES,
+        lines: [...s.lines, `황금 로프 ${RAID_ROPES}개를 받았다! 놓쳐도 도망가지 않아요.`],
+      }));
+    }
+    if (result === 'fled') { save(d); return backToWorld(fight.kind === 'wild' && fight.pre.length ? { pages: fight.pre } : null); }
     if (result === 'escaped' && fight.kind === 'wild') {
       save(d);
-      return backToWorld({ pages: ['내 오디가 쓰러졌다…', `야생 ${speciesById(fight.foe.speciesId).name}은(는) 도망가 버렸다.`, '오디들은 잠깐 쉬면 다시 힘이 나요. 레벨이 높은 오디(빨간 Lv)는 조심!'] });
+      return backToWorld({ pages: ['내 오디가 쓰러졌다…', `야생 ${speciesById(fight.foe.speciesId).name}은(는) 도망가 버렸다.`, '오디들은 잠깐 쉬면 다시 힘이 나요. 레벨이 높은 오디(빨간 Lv)는 조심!', ...fight.pre] });
     }
     if (result === 'lost') {
       const s = settleLoss(d);
@@ -145,6 +189,11 @@ export default function App() {
     }
     if (fight.kind === 'trainer') {
       const tr = fight.trainer;
+      if (fight.rematch) {
+        const s = settleRematch(d, alive, tr, localDay());
+        save(s.save);
+        return backToWorld({ speaker: tr.name, pages: s.lines });
+      }
       const s = settleTrainer(d, alive, tr);
       save(s.save);
       if (s.champion) setCredits(true);
@@ -152,7 +201,7 @@ export default function App() {
     }
     const won = settleWin(d, alive, [fight.foe]);
     const s = questsAfter(won.save, { kind: 'winWild' });
-    const lines = [...won.lines, ...s.lines];
+    const lines = [...fight.pre, ...won.lines, ...s.lines];
     save(s.save);
     if (s.save.ropes.basic + s.save.ropes.sturdy > 0) {
       const f = fight;
@@ -167,6 +216,8 @@ export default function App() {
   const onCatchEnd = (caught: boolean, ropes: SaveData['ropes'], excellent = 0) => {
     const d = dataRef.current;
     if (!d || !fight || fight.stage !== 'catch' || wiping.current) return;
+    const raid = fight.golden !== undefined;
+    if (raid) ropes = d.ropes; // 황금 로프만 썼다
     const ex = excellent > 0 ? questsAfter({ ...d, ropes }, { kind: 'excellent', n: excellent }) : { save: { ...d, ropes }, lines: [] };
     if (caught) {
       const s = settleCatch(ex.save, fight.foe, ropes);
@@ -175,13 +226,14 @@ export default function App() {
       return backToWorld({ pages: [...fight.lines, ...s.lines, ...ex.lines, ...q.lines] });
     }
     save(ex.save);
-    backToWorld({ pages: [...fight.lines, `${speciesById(fight.foe.speciesId).name}은(는) 도망갔다… 그래도 경험치는 받았어!`, ...ex.lines] });
+    const name = speciesById(fight.foe.speciesId).name;
+    backToWorld({ pages: [...fight.lines, raid ? `${name}은(는) 빛과 함께 사라졌다… 다음 주 보스를 기다려 보자!` : `${name}은(는) 도망갔다… 그래도 경험치는 받았어!`, ...ex.lines] });
   };
 
   // 지금 화면에 맞는 배경음악
   let music: TrackId = 'title';
   if (!titled || !data || online || flow.phase !== 'ready') music = 'title';
-  else if (fight?.stage === 'fight') music = fight.kind === 'wild' ? 'wild' : fight.trainer.champion ? 'champion' : 'trainer';
+  else if (fight?.stage === 'fight') music = fight.kind === 'wild' ? 'wild' : fight.kind === 'raid' || fight.trainer.champion || fight.rematch ? 'champion' : 'trainer';
   else music = getMap(data.map)?.region ?? 'meadow';
   useEffect(() => { playMusic(music); }, [music]);
 
@@ -225,6 +277,13 @@ export default function App() {
         onClose={() => setOnline(false)}
       />
     );
+  } else if (fight?.stage === 'fight' && fight.kind === 'raid') {
+    screen = (
+      <BattleScreen
+        kind="trainer" raid region={fight.region} team={fight.picks.map((i) => data.team[i]).filter(Boolean)} foes={[fight.foe]}
+        trainerName="레이드 보스" ai="trainer" potions={data.potions} onEnd={onBattleEnd}
+      />
+    );
   } else if (fight?.stage === 'fight') {
     screen = (
       <BattleScreen
@@ -233,7 +292,7 @@ export default function App() {
         team={data.team}
         foes={fight.kind === 'wild' ? [fight.foe] : fight.trainer.team}
         trainerName={fight.kind === 'trainer' ? fight.trainer.name : undefined}
-        ai={fight.kind === 'wild' ? 'wild' : fight.trainer.champion ? 'champion' : fight.trainer.badge ? 'leader' : 'trainer'}
+        ai={fight.kind === 'wild' ? 'wild' : fight.trainer.champion || fight.rematch ? 'champion' : fight.trainer.badge ? 'leader' : 'trainer'}
         shiny={fight.kind === 'wild' && !!fight.foe.shiny}
         strong={fight.kind === 'wild' && !!fight.foe.strong}
         potions={data.potions}
@@ -244,7 +303,7 @@ export default function App() {
     screen = (
       <CatchScreen
         speciesId={fight.foe.speciesId} level={fight.foe.level} region={fight.region} status={fight.status}
-        ropes={data.ropes} onEnd={onCatchEnd} shiny={!!fight.foe.shiny} isNew={fight.isNew} combo={fight.combo} team={data.team}
+        ropes={data.ropes} onEnd={onCatchEnd} shiny={!!fight.foe.shiny} isNew={fight.isNew} combo={fight.combo} team={data.team} golden={fight.golden}
       />
     );
   } else {
@@ -255,6 +314,7 @@ export default function App() {
         onData={update}
         onEncounter={onEncounter}
         onTrainer={onTrainer}
+        onRaid={onRaid}
         message={message}
         menu={{
           accountName: account?.username ?? null,

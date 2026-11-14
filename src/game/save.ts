@@ -2,6 +2,7 @@ import { cleanDex, dexFromOwned, emptyDex, markCaught, type Dex } from './dex.ts
 import { MAX_TEAM, type OwnedOddie } from './owned.ts';
 import { parseQuests, type QuestState } from './quests.ts';
 import type { Combo } from './fun.ts';
+import { parseDaily, type DailyState } from './daily.ts';
 
 export const SAVE_KEY = 'oddie-world-save-v1'; // 키는 그대로 두고 version 필드로 구분한다
 export const SAVE_AT_KEY = 'oddie-world-save-at'; // 이 기기에서 마지막으로 저장한 시각(ms)
@@ -62,6 +63,16 @@ export interface SaveData {
   quests?: QuestState;
   /** 같은 종 연속 잡기 */
   combo?: Combo;
+  /** 종 번호 → 사탕 수 */
+  candy?: Record<number, number>;
+  /** 이상한 사탕(어느 종에나) */
+  rareCandy?: number;
+  /** 매일 보상 */
+  daily?: DailyState;
+  /** 관장 id → 마지막으로 재도전한 날 */
+  rematch?: Record<string, string>;
+  /** 레이드를 이긴 주(이번 주는 끝) */
+  raid?: { week: string };
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -100,6 +111,25 @@ const parseStrings = (value: unknown): string[] =>
   Array.isArray(value)
     ? value.filter((v): v is string => typeof v === 'string' && v.length > 0 && v.length <= 64).slice(0, 200)
     : [];
+
+function parseCandy(value: unknown): Record<number, number> | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const out: Record<number, number> = {};
+  for (const [k, v] of Object.entries(value).slice(0, 1000)) {
+    const id = Number(k);
+    if (Number.isInteger(id) && id >= 1 && id <= 999 && isCount(v) && v > 0) out[id] = Math.min(v, 99999);
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+function parseDays(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(value).slice(0, 50)) {
+    if (k.length <= 64 && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) out[k] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 function parseOddie(value: unknown): OwnedOddie | null {
   if (typeof value !== 'object' || value === null) return null;
@@ -164,6 +194,15 @@ export function parseSave(raw: string | null): SaveData | null {
       if (quests) base.quests = quests;
       const c = data.combo as Record<string, unknown> | undefined;
       if (c && isCount(c.speciesId) && c.speciesId >= 1 && isCount(c.count) && c.count >= 1) base.combo = { speciesId: c.speciesId, count: Math.min(c.count, 999) };
+      const candy = parseCandy(data.candy);
+      if (candy) base.candy = candy;
+      if (isCount(data.rareCandy) && data.rareCandy > 0) base.rareCandy = Math.min(data.rareCandy, 9999);
+      const daily = parseDaily(data.daily);
+      if (daily) base.daily = daily;
+      const rematch = parseDays(data.rematch);
+      if (rematch) base.rematch = rematch;
+      const raid = data.raid as Record<string, unknown> | undefined;
+      if (raid && typeof raid.week === 'string' && /^\d{4}-W\d{2}$/.test(raid.week)) base.raid = { week: raid.week };
     }
     return base;
   } catch {

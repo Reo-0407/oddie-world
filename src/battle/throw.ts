@@ -76,11 +76,11 @@ export interface ThrowOutcome {
 
 /** 한 번 던지기. 빗나가면 로프만 잃고, 놓치면 10% 확률로 도망간다 */
 export function resolveThrow(
-  rarity: Rarity, status: Status | null, rope: RopeKind, aim: Aim, ring: number, rng: () => number = Math.random,
+  rarity: Rarity, status: Status | null, rope: RopeKind, aim: Aim, ring: number, rng: () => number = Math.random, canFlee = true,
 ): ThrowOutcome {
   const grade = judgeThrow(aim, ring);
   if (grade === 'miss') return { grade, chance: 0, shakes: 0, caught: false, fled: false };
   const chance = throwChance(rarity, status, rope, grade);
   const seq = ropeSequence(chance, rng);
-  return { grade, chance, shakes: seq.shakes, caught: seq.success, fled: !seq.success && rng() < FLEE_CHANCE };
+  return { grade, chance, shakes: seq.shakes, caught: seq.success, fled: canFlee && !seq.success && rng() < FLEE_CHANCE };
 }

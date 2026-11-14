@@ -8,6 +8,7 @@ export const WILD_LEVELS: Record<RegionId, [number, number]> = {
   meadow: [3, 6], desert: [10, 14], snow: [17, 22], volcano: [25, 30],
 };
 const CANDIDATES = SPECIES.map((s) => ({ id: s.id, types: s.types, rarity: s.rarity }));
+const WATER = CANDIDATES.filter((c) => c.types.includes('water'));
 
 export interface WildRoll {
   speciesId: number;
@@ -44,23 +45,28 @@ export interface WildOptions {
   phase?: DayPhase;
   /** 같은 종 연속 잡기 수(반짝이 확률이 조금 오른다) */
   combo?: number;
+  /** 반짝이 확률 배율(매일 보상 7일째) */
+  shinyMult?: number;
+  /** 낚시: 물 타입만 */
+  water?: boolean;
 }
 
 export function rollWild(region: RegionId, rand: () => number, opts: WildOptions = {}): WildRoll {
   const [lo, hi] = WILD_LEVELS[region];
   const phase = opts.phase;
-  const speciesId = pickSpeciesForRegion(region, CANDIDATES, rand, phase ? (c) => timeWeight(c.types, phase) : undefined);
+  const pool = opts.water ? WATER : CANDIDATES;
+  const speciesId = pickSpeciesForRegion(region, pool, rand, phase ? (c) => timeWeight(c.types, phase) : undefined);
   if (opts.lead === undefined) return { speciesId, level: lo + Math.floor(rand() * (hi - lo + 1)), region };
   // 막 시작한 트레이너(선두 Lv.8 미만)에게는 강한 야생 오디가 나오지 않는다
   const strong = opts.lead >= 8 && rand() < STRONG_CHANCE;
   const level = Math.min(100, wildLevel(region, opts.lead, rand) + (strong ? STRONG_LEVELS : 0));
   const roll: WildRoll = { speciesId, level, region };
   if (strong) roll.strong = true;
-  if (rollShiny(rand, opts.combo)) roll.shiny = true;
+  if (rollShiny(rand, opts.combo, opts.shinyMult)) roll.shiny = true;
   return roll;
 }
 
-export interface TrainerTeamMember { speciesId: number; level: number }
+export interface TrainerTeamMember { speciesId: number; level: number; /** 이 레벨까지 배운 기술 중에서 고른다(재도전 관장) */ moveLevel?: number }
 
 export interface Trainer {
   /** 지도 NPC의 id와 같다 */

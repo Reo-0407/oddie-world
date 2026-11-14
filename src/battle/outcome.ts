@@ -1,6 +1,8 @@
 import { speciesById } from '../data/index.ts';
 import { dexMilestoneReward, markCaught, markShiny } from '../game/dex.ts';
 import { comboBonus, nextCombo } from '../game/fun.ts';
+import { addCandy, catchCandy, RARE_CANDY_NAME } from '../game/candy.ts';
+import { RAID_COINS, REMATCH_RARE_CANDY, isoWeek } from '../game/postgame.ts';
 import { highestLevel } from '../game/owned.ts';
 import { advanceQuests, questText, rewardText, type QuestCtx, type QuestEvent } from '../game/quests.ts';
 import { grantExp, settleBattle } from '../game/rewards.ts';
@@ -8,6 +10,7 @@ import { START_LEVEL, type Ropes, type SaveData } from '../game/save.ts';
 import { BADGE_NAMES, STRONG_REWARD, TRAINERS, type Trainer } from '../overworld/encounters.ts';
 import { MAPS, getMap, type HiddenItem } from '../overworld/maps/index.ts';
 import { itemFlag } from '../overworld/world.ts';
+import { ROD_FLAG } from '../overworld/fishing.ts';
 
 /** 오프라인 전투가 끝난 뒤 저장을 고친다. 돌려주는 lines는 월드 대화 상자에 보여 줄 문구 */
 export interface Settled { save: SaveData; lines: string[] }
@@ -59,6 +62,9 @@ export function settleCatch(save: SaveData, foe: Foe, ropes: Ropes): Settled & {
   };
   const name = speciesById(foe.speciesId).name;
   const lines = [`${foe.shiny ? '✨ 반짝이 ' : ''}${name}을(를) 잡았다!${isNew ? ' 도감에 새로 등록!' : ''}${r.caught?.toBox ? ' 팀이 꽉 차서 박스로 보냈다.' : ''}`];
+  const candy = catchCandy(combo.count);
+  Object.assign(next, { candy: addCandy(next, foe.speciesId, candy).candy });
+  lines.push(`${name} 사탕 +${candy}`);
   const bonus = comboBonus(combo.count);
   if (bonus) {
     next.coins += bonus.coins;
@@ -101,6 +107,25 @@ export function settleTrainer(save: SaveData, alive: boolean[], tr: Trainer): Se
   return { save: next, lines, champion };
 }
 
+/** 관장 재도전을 이겼다: 큰 코인과 이상한 사탕, 오늘은 끝 */
+export function settleRematch(save: SaveData, alive: boolean[], tr: Trainer, today: string): Settled {
+  const s = settleWin(save, alive, tr.team, tr);
+  const q = questsAfter(s.save, { kind: 'beatTrainer' });
+  const next: SaveData = {
+    ...q.save, rareCandy: (q.save.rareCandy ?? 0) + REMATCH_RARE_CANDY, rematch: { ...q.save.rematch, [tr.id]: today },
+  };
+  return { save: next, lines: [tr.lines.after, ...s.lines, `${RARE_CANDY_NAME} +${REMATCH_RARE_CANDY}`, ...q.lines] };
+}
+
+/** 레이드 보스를 쓰러뜨렸다: 경험치·코인, 이번 주는 끝(잡기는 황금 로프로 따로) */
+export function settleRaidWin(save: SaveData, alive: boolean[], boss: Foe, today: string): Settled {
+  const s = settleWin(save, alive, [boss]);
+  return {
+    save: { ...s.save, coins: s.save.coins + RAID_COINS, raid: { week: isoWeek(today) } },
+    lines: [`레이드 보스 ${speciesById(boss.speciesId).name}을(를) 쓰러뜨렸다!`, ...s.lines.slice(1), `레이드 보상 코인 +${RAID_COINS}`],
+  };
+}
+
 const GIFT_NAME: Record<HiddenItem['gift'], string> = { rope: '로프', sturdy: '튼튼한 로프', potion: '회복약', coins: '코인' };
 
 /** 숨은 물건을 주웠다(이미 주운 것이면 그대로) */
@@ -124,6 +149,7 @@ export function questCtx(save: SaveData): QuestCtx {
     region: getMap(save.map)?.region ?? 'meadow',
     trainersLeft: TRAINER_IDS.filter((id) => !save.beaten.includes(id)).length,
     itemsLeft: ALL_ITEMS.filter((i) => !save.flags.includes(itemFlag(i.id))).length,
+    hasRod: save.flags.includes(ROD_FLAG),
   };
 }
 

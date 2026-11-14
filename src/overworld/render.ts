@@ -55,6 +55,8 @@ export interface Scene {
   flash: number;
   /** 바깥 지도의 낮·밤 색(a=0이면 없음) */
   tint?: Tint;
+  /** 낚시 중: 찌가 떠 있는 칸, 던지는 정도(0~1), 입질 중인가 */
+  fishing?: { x: number; y: number; cast: number; bite: boolean } | null;
 }
 
 export type ParticleKind = 'leaf' | 'dust' | 'poof' | 'sparkle' | 'heart';
@@ -307,6 +309,35 @@ export function createRenderer(canvas: HTMLCanvasElement) {
         else if (m.level !== undefined && sc > 0.9) levelTag(sx + 16, top + 4, m.level, m.tag ?? 'yellow', !!m.shiny);
       },
     });
+    // 낚싯줄과 찌: 사람보다 먼저(물 위) 그린다
+    const fish = s.fishing;
+    if (fish) {
+      const hx = Math.round(s.player.px) - camX + SPRITE_W / 2 + (s.player.dir === 'left' ? -8 : s.player.dir === 'right' ? 8 : 4);
+      const hy = Math.round(s.player.py) - camY + (s.player.dir === 'down' ? 18 : 6);
+      const k = Math.min(1, fish.cast);
+      const dip = fish.bite ? 3 + Math.round(Math.sin(s.time / 60) * 2) : Math.round(Math.sin(s.time / 400));
+      const bx = Math.round(hx + (fish.x * TILE + 16 - camX - hx) * k);
+      const by = Math.round(hy + (fish.y * TILE + 16 - camY - hy) * k - Math.sin(k * Math.PI) * 18) + (k >= 1 ? dip : 0);
+      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(hx + 0.5, hy + 0.5);
+      ctx.quadraticCurveTo((hx + bx) / 2, Math.min(hy, by) - 10, bx + 0.5, by + 0.5);
+      ctx.stroke();
+      if (k >= 1) {
+        // 물결: 입질이면 크고 빠르게
+        const ph = (s.time / (fish.bite ? 250 : 900)) % 1;
+        ctx.strokeStyle = `rgba(255,255,255,${0.6 * (1 - ph)})`;
+        ctx.beginPath();
+        ctx.ellipse(bx, by + 3, 4 + ph * (fish.bite ? 12 : 7), 2 + ph * (fish.bite ? 5 : 3), 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(bx - 2, by - 3, 5, 3);
+      ctx.fillStyle = '#e8484f';
+      ctx.fillRect(bx - 2, by, 5, 3);
+    }
+
     for (const n of s.npcs) person(n, false);
     person(s.player, true);
     for (const m of s.mons ?? []) mon(m);

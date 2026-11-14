@@ -6,6 +6,7 @@ import {
 import { createRng } from '../engine/rng.ts';
 import type { Status, TypeName } from '../engine/types.ts';
 import { REGIONS, type RegionId } from '../overworld/regions.ts';
+import { RAID_HP, RAID_MS, RAID_SWITCH_MS } from '../game/postgame.ts';
 import { OddieArt, typeColor } from './OddieArt.tsx';
 import { TYPE_NAMES } from './DexOverlay.tsx';
 import { jingle, sfx } from '../audio/audio.ts';
@@ -15,7 +16,7 @@ interface Props {
   kind: 'wild' | 'trainer';
   region: RegionId;
   team: { speciesId: number; level: number; shiny?: boolean }[];
-  foes: { speciesId: number; level: number }[];
+  foes: { speciesId: number; level: number; moveLevel?: number }[];
   trainerName?: string;
   /** 상대의 머리(야생 < 트레이너 < 관장 < 챔피언) */
   ai?: AiTier;
@@ -25,6 +26,8 @@ interface Props {
   strong?: boolean;
   /** 가진 회복약 수 */
   potions: number;
+  /** 레이드 보스전: 체력 5배·3분·자유 교체, 보스가 크게 보인다 */
+  raid?: boolean;
   /** 끝나면: 결과, 서 있는 내 오디, 마지막 상대 오디의 상태이상(잡기 확률용), 남은 회복약 */
   onEnd(result: RtResult, alive: boolean[], foeStatus: Status | null, potionsLeft: number): void;
 }
@@ -34,8 +37,8 @@ const STATUS_NAMES: Record<Status, string> = { poison: '독', burn: '화상', pa
 const SWIPE_PX = 40;
 
 /** 포켓몬 고식 실시간 전투 화면. 탭=기본 공격, 좌우로 쓸기=피하기, 필살기 버튼 */
-export function BattleScreen({ kind, region, team, foes, trainerName, ai, shiny = false, strong = false, potions, onEnd }: Props) {
-  const [state, setState] = useState<RtState>(() => createRealtime(kind, team, foes, potions, ai));
+export function BattleScreen({ kind, region, team, foes, trainerName, ai, shiny = false, strong = false, potions, raid = false, onEnd }: Props) {
+  const [state, setState] = useState<RtState>(() => createRealtime(kind, team, foes, potions, ai, raid ? { foeHp: RAID_HP, timeMs: RAID_MS, switchMs: RAID_SWITCH_MS } : {}));
   const [pops, setPops] = useState<Pop[]>([]);
   const [fx, setFx] = useState({ foeHit: 0, meHit: 0, flash: 0, wave: 0, waveColor: '#fff', dodge: 0 });
   const [banner, setBanner] = useState<{ id: number; text: string } | null>(null);
@@ -64,7 +67,9 @@ export function BattleScreen({ kind, region, team, foes, trainerName, ai, shiny 
     const name = state.foe[0].mon.name;
     if (shiny) sfx('shiny');
     const wildText = shiny ? `✨ 반짝이는 야생 ${name}이(가) 나타났다!` : strong ? `강한 야생 ${name}이(가) 나타났다!` : `야생 ${name}이(가) 나타났다!`;
-    showBanner(kind === 'wild' ? wildText : `${trainerName ?? '트레이너'}이(가) 승부를 걸어왔다!`, shiny ? 1600 : 1200, () => { paused.current = false; });
+    if (raid) sfx('shiny');
+    const text = raid ? `레이드 보스 ${name}이(가) 나타났다! 3분 안에 쓰러뜨려!` : kind === 'wild' ? wildText : `${trainerName ?? '트레이너'}이(가) 승부를 걸어왔다!`;
+    showBanner(text, shiny || raid ? 1600 : 1200, () => { paused.current = false; });
     // 처음 한 번만
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -117,7 +122,8 @@ export function BattleScreen({ kind, region, team, foes, trainerName, ai, shiny 
             const r = e.result;
             if (r === 'won') jingle('victory');
             else if (r === 'fled') sfx('flee');
-            showBanner(r === 'won' ? '이겼다!' : r === 'lost' ? '졌다…' : r === 'escaped' ? '쓰러졌다… 야생 오디가 도망갔다' : '무사히 도망쳤다!');
+            const timeUp = r === 'lost' && cur.timeLeft === 0;
+            showBanner(r === 'won' ? '이겼다!' : timeUp ? '시간 초과… 보스가 떠났다' : r === 'lost' ? '졌다…' : r === 'escaped' ? '쓰러졌다… 야생 오디가 도망갔다' : '무사히 도망쳤다!');
             const final = cur;
             later(() => endRef.current(r, aliveMine(final), activeOf(final, 'foe').mon.status, final.potions), 1300);
           }
@@ -215,15 +221,20 @@ export function BattleScreen({ kind, region, team, foes, trainerName, ai, shiny 
         >
           회복약 ×{state.potions}{state.potionCd > 0 ? ` (${Math.ceil(state.potionCd / 1000)})` : ''}
         </button>
-        {kind === 'wild' && <button type="button" onClick={() => { input.current.run = true; }}>도망</button>}
-        {kind === 'trainer' && (
+        {(kind === 'wild' || raid) && <button type="button" onClick={() => { input.current.run = true; }}>{raid ? '그만두기' : '도망'}</button>}
+        {raid && state.timeLeft !== undefined && (
+          <span className={`rt-timer${state.timeLeft < 30_000 ? ' low' : ''}`} aria-label="남은 시간">
+            {Math.floor(state.timeLeft / 60_000)}:{String(Math.floor((state.timeLeft % 60_000) / 1000)).padStart(2, '0')}
+          </span>
+        )}
+        {kind === 'trainer' && !raid && (
           <span className="rt-left" aria-label="상대 남은 오디">
             {state.foe.map((f, i) => <i key={i} className={f.mon.hp > 0 ? 'on' : ''} />)}
           </span>
         )}
       </div>
 
-      <div className={`rt-foe${shiny && state.foeActive === 0 ? ' shiny' : ''}${strong ? ' strong' : ''}`} style={{ '--tc': typeColor(foe.mon.types[0]) } as React.CSSProperties}>
+      <div className={`rt-foe${shiny && state.foeActive === 0 ? ' shiny' : ''}${strong ? ' strong' : ''}${raid ? ' raid' : ''}`} style={{ '--tc': typeColor(foe.mon.types[0]) } as React.CSSProperties}>
         <div className="rt-shadow" />
         {state.telegraph && <div className={`rt-bang${state.telegraph.ms <= 350 ? ' now' : ''}`}>!</div>}
         {shiny && <div className="rt-sparkles" aria-hidden>{Array.from({ length: 10 }, (_, i) => <i key={i} style={{ '--i': i } as React.CSSProperties} />)}</div>}

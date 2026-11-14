@@ -2,8 +2,8 @@ import type { TypeName } from '../engine/types.ts';
 import { REGION_IDS, REGIONS, type RegionId } from '../overworld/regions.ts';
 
 /** 오디 센터 퀘스트 게시판: 늘 3개, 끝내면 보상을 받고 새 퀘스트로 바뀐다 */
-export type QuestKind = 'catchType' | 'catchAny' | 'winWild' | 'excellent' | 'findItem' | 'beatTrainer';
-export const QUEST_KINDS: readonly QuestKind[] = ['catchType', 'catchAny', 'winWild', 'excellent', 'findItem', 'beatTrainer'];
+export type QuestKind = 'catchType' | 'catchAny' | 'winWild' | 'excellent' | 'findItem' | 'beatTrainer' | 'fish' | 'powerUp';
+export const QUEST_KINDS: readonly QuestKind[] = ['catchType', 'catchAny', 'winWild', 'excellent', 'findItem', 'beatTrainer', 'fish', 'powerUp'];
 
 export interface QuestReward { coins: number; basic: number; sturdy: number; potions: number }
 export interface Quest {
@@ -28,10 +28,12 @@ export type QuestEvent =
   | { kind: 'winWild' }
   | { kind: 'excellent'; n?: number }
   | { kind: 'findItem' }
-  | { kind: 'beatTrainer' };
+  | { kind: 'beatTrainer' }
+  | { kind: 'fish' }
+  | { kind: 'powerUp' };
 
 /** 지금 할 수 있는지 판단할 재료: 남은 트레이너·숨은 물건 수 */
-export interface QuestCtx { region: RegionId; trainersLeft: number; itemsLeft: number }
+export interface QuestCtx { region: RegionId; trainersLeft: number; itemsLeft: number; /** 낚싯대가 있나(없으면 낚시 퀘스트는 안 나온다) */ hasRod?: boolean }
 
 export const QUEST_SLOTS = 3;
 const TYPE_NAMES: Record<TypeName, string> = {
@@ -52,6 +54,8 @@ function goalFor(kind: QuestKind, tier: number, rand: () => number): number {
     case 'excellent': return tier >= 2 ? 2 : pick(1, 2);
     case 'findItem': return 1;
     case 'beatTrainer': return tier >= 1 ? 2 : 1;
+    case 'fish': return 2;
+    case 'powerUp': return 1;
   }
 }
 
@@ -61,7 +65,8 @@ function rewardFor(kind: QuestKind, goal: number, tier: number): QuestReward {
   if (kind === 'catchType' || kind === 'catchAny') r.basic = 3 + tier;
   else if (kind === 'winWild') r.potions = 1 + Math.floor(tier / 2);
   else if (kind === 'excellent') r.sturdy = 1 + Math.floor(tier / 2);
-  else if (kind === 'findItem') r.basic = 2 + tier;
+  else if (kind === 'findItem' || kind === 'fish') r.basic = 2 + tier;
+  else if (kind === 'powerUp') r.potions = 1;
   else { r.sturdy = 1; r.potions = 1; }
   return r;
 }
@@ -71,6 +76,7 @@ export function feasible(q: Pick<Quest, 'kind' | 'goal' | 'progress'>, ctx: Ques
   const need = q.goal - q.progress;
   if (q.kind === 'beatTrainer') return ctx.trainersLeft >= need;
   if (q.kind === 'findItem') return ctx.itemsLeft >= need;
+  if (q.kind === 'fish') return !!ctx.hasRod;
   return true;
 }
 
@@ -110,6 +116,8 @@ const matches = (q: Quest, ev: QuestEvent): number => {
     case 'excellent': return q.kind === 'excellent' ? ev.n ?? 1 : 0;
     case 'findItem': return q.kind === 'findItem' ? 1 : 0;
     case 'beatTrainer': return q.kind === 'beatTrainer' ? 1 : 0;
+    case 'fish': return q.kind === 'fish' ? 1 : 0;
+    case 'powerUp': return q.kind === 'powerUp' ? 1 : 0;
   }
 };
 
@@ -140,6 +148,8 @@ export function questText(q: Pick<Quest, 'kind' | 'goal' | 'type'>): string {
     case 'excellent': return `Excellent 던지기 ${q.goal}번`;
     case 'findItem': return `숨은 아이템 ${q.goal}개 찾기`;
     case 'beatTrainer': return `트레이너 ${q.goal}명 이기기`;
+    case 'fish': return `낚시로 오디 ${q.goal}번 낚기`;
+    case 'powerUp': return `오디 강화 ${q.goal}번`;
   }
 }
 

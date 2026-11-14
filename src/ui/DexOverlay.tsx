@@ -32,7 +32,7 @@ export function habitatsOf(species: Pick<Species, 'types'>): string[] {
     .map((row) => REGIONS[row.id].name);
 }
 
-function Detail({ species, caught, onBack }: { species: Species; caught: boolean; onBack: () => void }) {
+function Detail({ species, caught, candy, onBack }: { species: Species; caught: boolean; candy: number; onBack: () => void }) {
   const signature = MOVES[species.signatureMoveId];
   const habitats = habitatsOf(species);
   return (
@@ -50,6 +50,7 @@ function Detail({ species, caught, onBack }: { species: Species; caught: boolean
             ))}
           </div>
           <div>희귀도 {RARITY_NAMES[species.rarity]}</div>
+          {caught && <div className="dex-candy">{species.name} 사탕 <b>{candy}</b></div>}
         </div>
       </div>
       <p>
@@ -84,11 +85,13 @@ function Detail({ species, caught, onBack }: { species: Species; caught: boolean
 
 interface Props {
   dex: Dex;
+  /** 종 번호 → 사탕 수 */
+  candy?: Record<number, number>;
   onClose: () => void;
 }
 
 /** 오디 도감: 번호순 격자. 잡은 종은 그림과 이름, 만난 종은 실루엣과 이름, 못 본 종은 ??? */
-export function DexOverlay({ dex, onClose }: Props) {
+export function DexOverlay({ dex, candy, onClose }: Props) {
   const [selected, setSelected] = useState<number | null>(null);
   const progress = dexProgress(dex, SPECIES.length);
   const picked = selected === null ? null : SPECIES.find((s) => s.id === selected) ?? null;
@@ -103,7 +106,7 @@ export function DexOverlay({ dex, onClose }: Props) {
           {!!dex.shinyCaught?.length && <> · ✨ 반짝이 <strong>{dex.shinyCaught.length}</strong></>}
         </p>
         {picked && pickedStatus !== 'unknown' ? (
-          <Detail species={picked} caught={pickedStatus === 'caught'} onBack={() => setSelected(null)} />
+          <Detail species={picked} caught={pickedStatus === 'caught'} candy={candy?.[picked.id] ?? 0} onBack={() => setSelected(null)} />
         ) : (
           <>
             {picked && <p className="note">아직 만나지 못한 오디예요.</p>}

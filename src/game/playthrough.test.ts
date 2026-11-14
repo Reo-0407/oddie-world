@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { collectItem, questsAfter, settleCatch, settleLoss, settleTrainer, settleWin } from '../battle/outcome.ts';
-import { activeOf, aliveMine, createRealtime, energyCost, tick, type AiTier, type RtResult } from '../battle/realtime.ts';
+import {
+  collectItem, questCtx, questsAfter, settleCatch, settleLoss, settleRaidWin, settleRematch, settleTrainer, settleWin,
+} from '../battle/outcome.ts';
+import { activeOf, aliveMine, createRealtime, energyCost, tick, type AiTier, type RtOptions, type RtResult } from '../battle/realtime.ts';
+import { candyOf, powerUp } from './candy.ts';
+import { claimDaily, DAILY_REWARDS } from './daily.ts';
+import { canRematch, isoWeek, raidBoss, raidOpen, rematchTrainer, RAID_HP, RAID_MS, REMATCH_RARE_CANDY } from './postgame.ts';
+import { fishSpot, reel, ROD_FLAG } from '../overworld/fishing.ts';
 import { createRng } from '../engine/rng.ts';
 import { BADGE_ORDER, TRAINERS, type Trainer } from '../overworld/encounters.ts';
 import { MAPS } from '../overworld/maps/index.ts';
@@ -65,9 +71,9 @@ const findNpc = (pred: (n: Npc) => boolean) => {
 };
 
 /** 실시간 전투를 끝까지: 늘 기본 공격, 필살기가 차면 쓰고, 빨간 ! 때 피한다 */
-function simulate(team: SaveData['team'], foes: { speciesId: number; level: number }[], kind: 'wild' | 'trainer', ai: AiTier, seed: number) {
+function simulate(team: SaveData['team'], foes: { speciesId: number; level: number; moveLevel?: number }[], kind: 'wild' | 'trainer', ai: AiTier, seed: number, opts: RtOptions = {}) {
   const rng = createRng(seed);
-  let s = createRealtime(kind, team, foes, 0, ai);
+  let s = createRealtime(kind, team, foes, 0, ai, opts);
   for (let t = 0; t < 30 * 60_000 && !s.result; t += 50) {
     const me = activeOf(s, 'me');
     const ready = me.charged.findIndex((m) => me.energy >= energyCost(m));
@@ -192,6 +198,69 @@ describe('처음부터 끝까지 한 판', () => {
     expect(settleTrainer(end.save, r.alive, champ).champion).toBe(false);
     save = roundtrip(end.save);
     expect(save.flags).toContain('champion');
+
+    // 7-1) 매일 보상: 주입한 날짜로 이틀 연속, 하루 거르면 1일째부터
+    const c1 = claimDaily(save, '2026-11-14')!;
+    expect(c1.day).toBe(1);
+    expect(claimDaily(c1.save, '2026-11-14')).toBeNull();
+    const c2 = claimDaily(c1.save, '2026-11-15')!;
+    expect(c2.day).toBe(2);
+    expect(c2.save.ropes.basic).toBe(c1.save.ropes.basic + DAILY_REWARDS[1].basic);
+    expect(claimDaily(c2.save, '2026-11-17')!.day).toBe(1);
+    save = roundtrip(c2.save);
+
+    // 7-2) 관장 재도전: 챔피언 뒤 하루 한 번, 이기면 이상한 사탕
+    const day = '2026-11-15';
+    expect(canRematch(save, 'leader-meadow', day)).toBe(true);
+    const re = rematchTrainer('leader-meadow')!;
+    const rr = simulate(save.team, re.team, 'trainer', 'champion', 4242);
+    expect(rr.result).toBe('won');
+    const coinsBefore = save.coins;
+    const rs = settleRematch(save, rr.alive, re, day);
+    expect(rs.save.coins).toBeGreaterThanOrEqual(coinsBefore + re.reward);
+    expect(rs.save.rareCandy).toBe((save.rareCandy ?? 0) + REMATCH_RARE_CANDY);
+    expect(canRematch(rs.save, 'leader-meadow', day)).toBe(false);
+    expect(canRematch(rs.save, 'leader-meadow', '2026-11-16')).toBe(true);
+    save = roundtrip(rs.save);
+
+    // 7-3) 사탕과 강화: 잡을 때 받은 사탕(+이상한 사탕)으로 1레벨
+    expect(candyOf(save, 42)).toBeGreaterThanOrEqual(3);
+    const slot = save.team.findIndex((o) => o.speciesId === 42);
+    const lv = save.team[slot].level;
+    const up = powerUp(save, 'team', slot)!;
+    expect(up.team[slot].level).toBe(lv + 1);
+    save = roundtrip(questsAfter(up, { kind: 'powerUp' }).save);
+
+    // 7-4) 낚시: 낚시꾼에게 갈 수 있고, 연못을 바라보는 칸에 설 수 있고, 퀘스트 재료가 된다
+    const fisher = findNpc((n) => n.role === 'fisher');
+    expect(talkSpot(fisher.map, fisher.npc, progressOf(save), world.seen)).not.toBeNull();
+    save = { ...save, flags: [...save.flags, ROD_FLAG] };
+    const spots = [...world.seen.values()].flatMap((s) => DIRS.map((d) => ({ ...s, facing: d })))
+      .filter((s) => fishSpot(MAPS[s.map], s, save.flags));
+    expect(new Set(spots.map((s) => MAPS[s.map].region))).toEqual(new Set(['meadow', 'desert', 'snow']));
+    expect(questCtx(save).hasRod).toBe(true);
+    expect(reel(1500, 1900)).toBe('hooked');
+    save = roundtrip(questsAfter(save, { kind: 'fish' }).save);
+
+    // 7-5) 레이드: 이번 주 보스를 세 마리로 이기고 황금 로프로 잡는다. 이번 주는 끝
+    const week = isoWeek(day);
+    const boss = raidBoss(week);
+    expect(raidOpen(save, week)).toBe(true);
+    const raidGuide = findNpc((n) => n.role === 'raid');
+    expect(talkSpot(raidGuide.map, raidGuide.npc, progressOf(save), world.seen), '레이드 안내원에게 갈 수 있다').not.toBeNull();
+    save = grind(save, 50);
+    const picks = [0, 1, 2];
+    let raidWon = false;
+    for (let k = 0; k < 5 && !raidWon; k += 1) {
+      const r2 = simulate(picks.map((i) => save.team[i]), [boss], 'trainer', 'trainer', 900 + k, { foeHp: RAID_HP, timeMs: RAID_MS, switchMs: 500 });
+      if (r2.result !== 'won') continue;
+      raidWon = true;
+      const won = settleRaidWin(save, save.team.map((_, i) => r2.alive[i] ?? false), boss, day);
+      expect(raidOpen(won.save, week)).toBe(false);
+      save = roundtrip(settleCatch(won.save, boss, won.save.ropes).save);
+    }
+    expect(raidWon, '레이드를 이길 수 있다').toBe(true);
+    expect(save.dex.caught).toContain(boss.speciesId);
 
     // 8) 져도 갇히지 않는다: 부활 지점에 설 수 있고, 로프가 없으면 간호사가 준다
     const lost = settleLoss({ ...save, respawn: { ...TOWN_RESPAWN } });

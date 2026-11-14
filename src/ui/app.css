@@ -550,3 +550,45 @@ button { transition: transform 0.08s, box-shadow 0.08s; }
   .gm-icon { width: 52px; height: 52px; font-size: 1.3rem; }
   .gm-close { width: 52px; height: 52px; font-size: 1.3rem; }
 }
+
+/* ---- 매일 보상 ---- */
+.daily-cal { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.daily-cal li { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 76px; padding: 6px 4px;
+  border-radius: 12px; background: #fff; border: 3px solid #23262b; box-shadow: 0 3px 0 #23262b; text-align: center; font-size: 0.72rem; line-height: 1.25; }
+.daily-cal li b { font-size: 0.95rem; font-weight: 400; }
+.daily-cal li.big { grid-column: span 2; background: linear-gradient(160deg, #fff6c4, #ffd24a); }
+.daily-cal li.done { background: #dff3e4; opacity: 0.75; }
+.daily-cal li.now { background: #fff3c4; box-shadow: 0 0 0 3px #ffd24a, 0 3px 0 #23262b; animation: daily-now 0.9s ease-in-out infinite alternate; }
+.daily-cal li i { position: absolute; top: -8px; right: -6px; width: 24px; height: 24px; border-radius: 50%; background: #3a9a4a; color: #fff; font-style: normal; display: grid; place-items: center; border: 2px solid #23262b; }
+@keyframes daily-now { from { transform: translateY(0); } to { transform: translateY(-3px); } }
+.daily-claim { background: #3a9a4a; color: #fff; font-size: 1.15rem; }
+.daily-claim:disabled { background: #b8b8b8; }
+/* ---- 레이드 ---- */
+.raid-boss { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px; border-radius: 16px; color: #fff; text-shadow: 0 1px 2px #000a;
+  background: radial-gradient(circle at 50% 40%, var(--tc), #3a1a5a 75%); border: 3px solid #23262b; box-shadow: 0 0 18px rgba(190,90,255,.6), 0 3px 0 #23262b; }
+.raid-boss .oddie-art { animation: daily-now 1.1s ease-in-out infinite alternate; filter: drop-shadow(0 0 10px #ffd24a); }
+.raid-boss span { font-size: 0.8rem; }
+/* ---- 팀·박스 상세, 강화 ---- */
+.gm-tabs { display: flex; gap: 6px; }
+.gm-tabs button { flex: 1; border-radius: 20px; }
+.gm-tabs button.on { background: #ffd24a; }
+.gm-box { grid-template-columns: repeat(4, 1fr); max-height: 46vh; overflow-y: auto; padding: 4px; }
+.gm-box .gm-mon { font-size: 0.72rem; }
+.gm-detail { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: #fff; border: 3px solid #23262b; box-shadow: 0 3px 0 #23262b; overflow: hidden; }
+.gm-detail-head { display: flex; align-items: center; gap: 10px; }
+.gm-detail-head > div { display: flex; flex-direction: column; gap: 2px; }
+.gm-candy { display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; }
+.gm-candy::before { content: ''; width: 14px; height: 10px; border-radius: 6px; background: linear-gradient(90deg, var(--c1, #e0523f) 50%, var(--c2, #fff) 50%); border: 1.5px solid #23262b; }
+.gm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.gm-actions button { min-height: 44px; border-radius: 12px; font-size: 0.85rem; }
+.gm-power { background: #8a5ac8; color: #fff; grid-column: 1 / -1; font-size: 1rem !important; }
+.gm-power:disabled { background: #c8c0d4; color: #fff; }
+.gm-msg { margin: 0; font-size: 0.82rem; text-align: center; color: #6b3fa0; }
+.gm-spark { position: absolute; inset: 0; pointer-events: none; }
+.gm-spark i { position: absolute; left: 30%; top: 40%; width: 12px; height: 12px; background: #ffd24a; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  animation: gm-spark 0.9s ease-out calc(var(--i) * 50ms) both; }
+@keyframes gm-spark { from { opacity: 1; transform: rotate(calc(var(--i) * 45deg)) translateY(0) scale(0.4); } to { opacity: 0; transform: rotate(calc(var(--i) * 45deg)) translateY(-70px) scale(1.2); } }
+.gm-lvup { animation: gm-lvup 0.6s cubic-bezier(.2,.9,.3,1.6); }
+@keyframes gm-lvup { 0% { transform: scale(1); } 40% { transform: scale(1.18); filter: brightness(1.5) drop-shadow(0 0 8px #ffd24a); } 100% { transform: scale(1); } }
+.dex-candy { margin: 0; }
+@media (prefers-reduced-motion: reduce) { .daily-cal li.now, .raid-boss .oddie-art, .gm-spark i, .gm-lvup { animation: none; } }

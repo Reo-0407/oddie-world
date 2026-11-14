@@ -3,10 +3,10 @@ import type { Ropes } from './save.ts';
 // ---------- 반짝이 오디 ----------
 export const SHINY_ODDS = 1 / 64;
 /** 연속 잡기 한 번마다 반짝이 확률 +10%, 최대 두 배 */
-export function shinyChance(combo = 0): number {
-  return SHINY_ODDS * (1 + Math.min(10, Math.max(0, combo)) * 0.1);
+export function shinyChance(combo = 0, mult = 1): number {
+  return SHINY_ODDS * (1 + Math.min(10, Math.max(0, combo)) * 0.1) * mult;
 }
-export const rollShiny = (rand: () => number, combo = 0) => rand() < shinyChance(combo);
+export const rollShiny = (rand: () => number, combo = 0, mult = 1) => rand() < shinyChance(combo, mult);
 
 // ---------- 잡기 연속 보너스 ----------
 export interface Combo { speciesId: number; count: number }
